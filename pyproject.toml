@@ -1,0 +1,21 @@
+[tool.black]
+target-version = ["py311"]
+line-length=88
+
+[tool.coverage.run]
+relative_files = true
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = true
+exclude_lines = ["if __name__ == .__main__.:", "def __str__", "def __repr__", "pragma: no cover"]
+
+[tool.isort]
+profile = "black"
+color_output = true
+combine_as_imports = true
+lines_after_imports = "2"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
