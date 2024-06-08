@@ -1,5 +1,6 @@
 from pystructtypes.structtypes import SMXConfigType
 
+
 # fmt: off
 config_data = [
     # masterVersion
@@ -28,7 +29,7 @@ config_data = [
     15, 15, 15, 15, 0,
     # autoLightsTimeout
     7,
-    #stepColor[3 * 9]
+    # stepColor[3 * 9]
     170, 170, 170,
     170, 170, 170,
     170, 170, 170,

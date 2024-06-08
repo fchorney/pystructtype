@@ -1,17 +1,12 @@
 import inspect
 import re
 import struct
+from collections.abc import Generator
 from copy import copy, deepcopy  # noqa
 
 # import struct
 from dataclasses import dataclass, field, is_dataclass
-from typing import (
-    Annotated,
-    Any,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 
 @dataclass
@@ -58,6 +53,43 @@ uint16_t = Annotated[int, TypeInfo("H", 2)]
 
 
 @dataclass
+class TypeIterator:
+    key: str
+    base_type: type
+    type_info: TypeInfo | None
+    type_meta: TypeMeta | None
+    is_list: bool
+
+    @property
+    def size(self):
+        return getattr(self.type_meta, "size", 1)
+
+
+def iterate_types(cls) -> Generator[TypeIterator, None, None]:
+    for key, hint in get_type_hints(cls, include_extras=True).items():
+        if inspect.isclass(hint) and issubclass(hint, StructDataclass):
+            type_args = get_args(hint)
+            is_list = False
+        else:
+            type_args = get_args(hint)
+            origin_type = (
+                type_args[0]
+                if inspect.isclass(type_args[0])
+                else get_origin(type_args[0])
+            )
+            is_list = issubclass(origin_type, list)
+        type_meta = next((x for x in type_args if isinstance(x, TypeMeta)), None)
+
+        if len(type_args) > 1:
+            while args := get_args(type_args[0]):
+                type_args = args
+        type_info = next((x for x in type_args if isinstance(x, TypeInfo)), None)
+        base_type = next(iter(type_args), hint)
+
+        yield TypeIterator(key, base_type, type_info, type_meta, is_list)
+
+
+@dataclass
 class StructState:
     name: str
     struct_fmt: str
@@ -69,42 +101,26 @@ class StructDataclass:
         self.__state: list[StructState] = []
         # Grab Struct Format
         self.struct_fmt = ""
-        for key, hint in get_type_hints(self, include_extras=True).items():
-            if inspect.isclass(hint) and issubclass(hint, StructDataclass):
-                type_args = get_args(hint)
-                is_list = False
-            else:
-                type_args = get_args(hint)
-                origin_type = (
-                    type_args[0]
-                    if inspect.isclass(type_args[0])
-                    else get_origin(type_args[0])
+        for type_iterator in iterate_types(self):
+            if type_iterator.type_info:
+                self.__state.append(
+                    StructState(
+                        type_iterator.key,
+                        type_iterator.type_info.format,
+                        type_iterator.size,
+                    )
                 )
-                is_list = issubclass(origin_type, list)
-            base_type_meta = next(
-                (x for x in type_args if isinstance(x, TypeMeta)), None
-            )
-
-            if len(type_args) > 1:
-                while args := get_args(type_args[0]):
-                    type_args = args
-            base_typeinfo = next(
-                (x for x in type_args if isinstance(x, TypeInfo)), None
-            )
-            base_type = next(iter(type_args), hint)
-
-            size = getattr(base_type_meta, "size", 1)
-            if base_typeinfo:
-                self.__state.append(StructState(key, base_typeinfo.format, size))
-                self.struct_fmt += f"{size if size > 1 else ''}{base_typeinfo.format}"
-            elif issubclass(base_type, StructDataclass):
-                attr = getattr(self, key)
-                if is_list:
+                self.struct_fmt += f"{type_iterator.size if type_iterator.size > 1 else ''}{type_iterator.type_info.format}"
+            elif issubclass(type_iterator.base_type, StructDataclass):
+                attr = getattr(self, type_iterator.key)
+                if type_iterator.is_list:
                     fmt = attr[0].struct_fmt
                 else:
                     fmt = attr.struct_fmt
-                self.__state.append(StructState(key, fmt, size))
-                self.struct_fmt += fmt * size
+                self.__state.append(
+                    StructState(type_iterator.key, fmt, type_iterator.size)
+                )
+                self.struct_fmt += fmt * type_iterator.size
         self._simplify_format()
         self._byte_length = struct.calcsize("=" + self.struct_fmt)
         print(f"{self.__class__.__name__}: {self._byte_length} : {self.struct_fmt}")
@@ -155,17 +171,24 @@ class StructDataclass:
         for state in self.__state:
             attr = getattr(self, state.name)
 
-            if (isinstance(attr, list) and isinstance(attr[0], StructDataclass)) or isinstance(attr, StructDataclass):
+            if (
+                isinstance(attr, list) and isinstance(attr[0], StructDataclass)
+            ) or isinstance(attr, StructDataclass):
                 if state.size == 1:
                     sub_struct_byte_length = attr._size()
                     attr.assign_decoded_values(data[idx : idx + sub_struct_byte_length])
                     idx += sub_struct_byte_length
                     continue
 
+                if not isinstance(attr, list):
+                    continue
+
                 list_idx = 0
-                sub_struct_byte_length = attr[0]._size()
+                sub_struct_byte_length = attr[0]._size()  # TODO: Fix warning here
                 while list_idx < state.size:
-                    attr[list_idx].assign_decoded_values(data[idx : idx + sub_struct_byte_length])
+                    attr[list_idx].assign_decoded_values(
+                        data[idx : idx + sub_struct_byte_length]
+                    )
                     list_idx += 1
                     idx += sub_struct_byte_length
             else:
@@ -189,15 +212,20 @@ class StructDataclass:
         )
 
     def retrieve_values_to_encode(self) -> list[int]:
-        result = []
+        result: list[int] = []
 
         for state in self.__state:
             attr = getattr(self, state.name)
 
-            if (isinstance(attr, list) and isinstance(attr[0], StructDataclass)) or isinstance(attr, StructDataclass):
+            if (
+                isinstance(attr, list) and isinstance(attr[0], StructDataclass)
+            ) or isinstance(attr, StructDataclass):
                 if state.size == 1:
                     result.extend(attr.retrieve_values_to_encode())
                 else:
+                    if not isinstance(attr, list):  # TODO: Get rid of this lol
+                        continue
+
                     for item in attr:
                         result.extend(item.retrieve_values_to_encode())
             else:
@@ -219,65 +247,46 @@ def struct_dataclass(cls: type[StructDataclass] | None = None, /, **kwargs):
             new_cls = _cls
         else:
             # Make sure any fields without a default have one
-            for k, v in inspect.get_annotations(_cls).items():
-                if inspect.isclass(v) and issubclass(v, StructDataclass):
-                    type_args = get_args(v)
-                    is_list = False
-                else:
-                    type_args = get_args(v)
-                    origin_type = (
-                        type_args[0]
-                        if inspect.isclass(type_args[0])
-                        else get_origin(type_args[0])
-                    )
-                    is_list = issubclass(origin_type, list)
-                base_type_meta = next(
-                    (x for x in type_args if isinstance(x, TypeMeta)), None
-                )
-
-                if len(type_args) > 1:
-                    while args := get_args(type_args[0]):
-                        type_args = args
-                base_type = next(iter(type_args), v)
-
-                # TODO: I don't know that we care about typeinfo here actually
-                if not base_type_meta or base_type_meta.size == 1:
+            for type_iterator in iterate_types(_cls):
+                if not type_iterator.type_meta or type_iterator.type_meta.size == 1:
                     # No type meta, or size is 1, we can assume it's not a list, and there is no
                     # specific default, so just instantiate it with the default value for
                     # the base type
-                    if not getattr(_cls, k, None):
+                    if not getattr(_cls, type_iterator.key, None):
                         default = (
-                            base_type_meta.default
-                            if (base_type_meta and base_type_meta.default)
-                            else base_type()
+                            type_iterator.type_meta.default
+                            if (
+                                type_iterator.type_meta
+                                and type_iterator.type_meta.default
+                            )
+                            else type_iterator.base_type()
                         )
                         setattr(
                             _cls,
-                            k,
+                            type_iterator.key,
                             field(default_factory=eval(f"lambda: deepcopy({default})")),
                         )
                 else:
                     # This assumes we want multiple items of base_type, so make sure the given base_type is
                     # properly set to be a list as well
-                    if not is_list:
+                    if not type_iterator.is_list:
                         raise Exception("You want a list, so make it a list you dummy")
                     # We have a meta type and the size is > 1 so make the default a field
                     default = (
-                        base_type_meta.default
-                        if (base_type_meta and base_type_meta.default)
-                        else base_type()
+                        type_iterator.type_meta.default
+                        if (type_iterator.type_meta and type_iterator.type_meta.default)
+                        else type_iterator.base_type()
                     )
                     setattr(
                         _cls,
-                        k,
+                        type_iterator.key,
                         field(
                             default_factory=eval(
-                                f"lambda: [deepcopy({default}) for _ in range({base_type_meta.size})]"
+                                f"lambda: [deepcopy({default}) for _ in range({type_iterator.type_meta.size})]"
                             )
                         ),
                     )
             new_cls = dataclass(**kwargs)(_cls)
-
         return new_cls
 
     # See if we're being called as @struct_dataclass or @struct_dataclass()
