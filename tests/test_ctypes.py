@@ -1,70 +1,78 @@
-from pystructtypes.structtypes import Gotem, SMXConfig_T, TestClass2
+from pystructtypes.structtypes import SMXConfigType
 
-
-# def test_smx_config():
-#     config = SMXConfig()
-#
-#     _input = [
-#         0x0F,
-#         0xF0,
-#         0xFF,
-#         0xFF,
-#         0xF0,
-#         0xF0,
-#         0x00,
-#         0xF0,
-#         0x0F,
-#         0x0F,
-#         0xF0,
-#         0xFF,
-#         0x00,
-#     ]
-#
-#     config.decode(_input, little_endian=True)
-#
-#     assert config.a == [15, 240]
-#
-#     e = config.encode(little_endian=True)
-#
-#     assert e == _input
-
-
-def test_struct_dataclass():
-    c = TestClass2()
-
-    assert isinstance(c, TestClass2)
-
-    _input = [
-        0x01,
-        0x02,
-        0x03,
-        0x04,
-        0x05,
-        0x06,
-        0x07,
-        0x08,
-        0x09,
-        0x10,
-        0x11,
-        0x12,
-        0x13,
-        0x14,
-        0x15,
-        0x16,
-        0x17,
-    ]
-    c.decode(_input, little_endian=True)
-    e = c._to_list(c.encode(little_endian=True))
-    assert e == _input
+# fmt: off
+config_data = [
+    # masterVersion
+    5,
+    # configVersion
+    5,
+    # flags
+    3,
+    # debounceNodelayMilliseconds
+    15, 0,
+    # debounceDelayMilliseconds
+    0, 0,
+    # panelDebounceMicroseconds
+    160, 15,
+    # autoCalibrationMaxDeviation
+    100,
+    # badSensorMinimumDelaySeconds
+    15,
+    # autoCalibrationAveragesPerUpdate
+    44, 1,
+    # autoCalibrationSamplesPerAverage
+    100, 0,
+    # autoCalibrationMaxTare
+    255, 255,
+    # enabledSensors[5]
+    15, 15, 15, 15, 0,
+    # autoLightsTimeout
+    7,
+    #stepColor[3 * 9]
+    170, 170, 170,
+    170, 170, 170,
+    170, 170, 170,
+    170, 170, 170,
+    170, 170, 170,
+    170, 170, 170,
+    170, 170, 170,
+    170, 170, 170,
+    170, 170, 170,
+    # platformStripColor[3]
+    0, 72, 143,
+    # autoLightPanelMask
+    170, 0,
+    # panelRotation
+    0,
+    # panelSettings[9]
+    33, 42, 235, 235, 235, 235, 238, 238, 238, 238, 255, 255, 255, 255, 0, 0,
+    33, 42, 235, 235, 235, 235, 238, 238, 238, 238, 255, 255, 255, 255, 0, 0,
+    33, 42, 235, 235, 235, 235, 238, 238, 238, 238, 255, 255, 255, 255, 0, 0,
+    33, 42, 235, 235, 235, 235, 238, 238, 238, 238, 255, 255, 255, 255, 0, 0,
+    33, 42, 235, 235, 235, 235, 238, 238, 238, 238, 255, 255, 255, 255, 0, 0,
+    33, 42, 235, 235, 235, 235, 238, 238, 238, 238, 255, 255, 255, 255, 0, 0,
+    33, 42, 235, 235, 235, 235, 238, 238, 238, 238, 255, 255, 255, 255, 0, 0,
+    33, 42, 235, 235, 235, 235, 238, 238, 238, 238, 255, 255, 255, 255, 0, 0,
+    33, 42, 235, 235, 235, 235, 238, 238, 238, 238, 255, 255, 255, 255, 0, 0,
+    # preDetailsDelayMilliseconds
+    5,
+    # padding[49]
+    255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255,
+]
+# fmt: on
 
 
 def test_smx_config():
-    c = SMXConfig_T()
+    c = SMXConfigType()
 
-    assert isinstance(c, SMXConfig_T)
+    c.decode(config_data, little_endian=True)
 
+    e = c.encode(little_endian=True)
 
-def test_gotem():
-    c = Gotem()
-
-    assert isinstance(c, Gotem)
+    assert c._to_list(e) == config_data

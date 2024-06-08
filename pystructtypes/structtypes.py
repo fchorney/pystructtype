@@ -1,25 +1,40 @@
 import inspect
 import re
 import struct
-from copy import deepcopy
+from copy import copy, deepcopy  # noqa
 
 # import struct
 from dataclasses import dataclass, field, is_dataclass
-from typing import Annotated, Any, TypeAlias, TypeVar, Union, get_type_hints, get_args, get_origin
+from typing import (
+    Annotated,
+    Any,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 
-# Just so we have a fancy name
-# StructList = Annotated
+@dataclass
+class TypeMeta:
+    size: int = 1
+    default: Any | None = None
+
+
+@dataclass
+class TypeInfo:
+    format: str
+    byte_size: int
+
 
 # Fixed Size Types
-# int8_t: TypeAlias = Annotated[int, "b"]  # 1 Byte
-# uint8_t: TypeAlias = Annotated[int, "B"]  # 1 Byte
-# int16_t: TypeAlias = Annotated[int, "h"]  # 2 Bytes
-# uint16_t: TypeAlias = Annotated[int, "H"]  # 2 Bytes
-# int32_t: TypeAlias = Annotated[int, "i"]  # 4 Bytes
-# uint32_t: TypeAlias = Annotated[int, "I"]  # 4 Bytes
-# int64_t: TypeAlias = Annotated[int, "q"]  # 8 Bytes
-# uint64_t: TypeAlias = Annotated[int, "Q"]  # 8 Bytes
+# int8_t = Annotated[int, "b"]  # 1 Byte
+uint8_t = Annotated[int, TypeInfo("B", 1)]
+# int16_t = Annotated[int, "h"]  # 2 Bytes
+uint16_t = Annotated[int, TypeInfo("H", 2)]
+# int32_t = Annotated[int, "i"]  # 4 Bytes
+# uint32_t = Annotated[int, "I"]  # 4 Bytes
+# int64_t = Annotated[int, "q"]  # 8 Bytes
+# uint64_t = Annotated[int, "Q"]  # 8 Bytes
 
 # TODO: Commented types shadow built-ins, figure out a good way to change that ?
 
@@ -55,67 +70,46 @@ class StructDataclass:
         # Grab Struct Format
         self.struct_fmt = ""
         for key, hint in get_type_hints(self, include_extras=True).items():
-            type_args = get_args(hint)
-            base_typemeta = next((x for x in type_args if isinstance(x, TypeMeta)), None)
+            if inspect.isclass(hint) and issubclass(hint, StructDataclass):
+                type_args = get_args(hint)
+                is_list = False
+            else:
+                type_args = get_args(hint)
+                origin_type = (
+                    type_args[0]
+                    if inspect.isclass(type_args[0])
+                    else get_origin(type_args[0])
+                )
+                is_list = issubclass(origin_type, list)
+            base_type_meta = next(
+                (x for x in type_args if isinstance(x, TypeMeta)), None
+            )
 
-            while (args := get_args(type_args[0])):
-                type_args = args
-            base_typeinfo = next((x for x in type_args if isinstance(x, TypeInfo)), None)
-            base_type = type_args[0]
+            if len(type_args) > 1:
+                while args := get_args(type_args[0]):
+                    type_args = args
+            base_typeinfo = next(
+                (x for x in type_args if isinstance(x, TypeInfo)), None
+            )
+            base_type = next(iter(type_args), hint)
 
-            if not meta or not isinstance(meta[0], CStructType):
-                sub_struct = getattr(self, key)
-                if len(meta) > 1:
-                    for sub in sub_struct:
-                        self.struct_fmt += sub.struct_fmt
-                        self.__state.append(StructState(key, meta[1]))
+            size = getattr(base_type_meta, "size", 1)
+            if base_typeinfo:
+                self.__state.append(StructState(key, base_typeinfo.format, size))
+                self.struct_fmt += f"{size if size > 1 else ''}{base_typeinfo.format}"
+            elif issubclass(base_type, StructDataclass):
+                attr = getattr(self, key)
+                if is_list:
+                    fmt = attr[0].struct_fmt
                 else:
-                    self.struct_fmt += sub_struct.struct_fmt
-                    self.__state.append(StructState(key, sub_struct))
-            else:
-                meta = meta[0]
-                self.struct_fmt += f"{meta.size if meta.size > 1 else ""}{meta.format}"
-                self.__state.append(StructState(key, meta))
-        print(self._simplify_format())
-        print(self._byte_length())
+                    fmt = attr.struct_fmt
+                self.__state.append(StructState(key, fmt, size))
+                self.struct_fmt += fmt * size
+        self._simplify_format()
+        self._byte_length = struct.calcsize("=" + self.struct_fmt)
+        print(f"{self.__class__.__name__}: {self._byte_length} : {self.struct_fmt}")
 
-    @classmethod
-    def struct_format(cls) -> str:
-        # Grab Struct Format
-        struct_fmt = ""
-        for key, hint in get_type_hints(cls, include_extras=True).items():
-            meta = getattr(hint, "__metadata__", [])
-
-            if not meta or not isinstance(meta[0], CStructType):
-                sub_struct = getattr(cls, key)
-                if len(meta) > 1:
-                    for sub in sub_struct:
-                        struct_fmt += sub.struct_fmt
-                else:
-                    struct_fmt += sub_struct.struct_fmt
-            else:
-                meta = meta[0]
-                struct_fmt += f"{meta.size if meta.size > 1 else ""}{meta.format}"
-        return struct_fmt
-
-    @classmethod
-    def byte_size(cls) -> int:
-        return struct.calcsize("=" + cls.struct_format())
-
-    def _byte_length(self, little_endian: bool = True) -> int:
-        return struct.calcsize(self._endian(little_endian) + self.struct_fmt)
-
-    @property
-    def size(self) -> int:
-        s = 0
-        for state in self.__state:
-            if isinstance(sub_struct := getattr(self, state.name), StructDataclass):
-                s += sub_struct.size
-            else:
-                s += state.structtype.size
-        return s
-
-    def _simplify_format(self) -> str:
+    def _simplify_format(self) -> None:
         # First expand the format
         expanded_format = ""
         items = re.findall(r"([a-zA-Z]|\d+)", self.struct_fmt)
@@ -134,17 +128,23 @@ class StructDataclass:
             group_len = len(group)
             simplified_format += f"{group_len if group_len > 1 else ""}{group[0]}"
 
-        return simplified_format
+        self.struct_fmt = simplified_format
 
-    def _endian(self, little_endian: bool) -> str:
+    def _size(self) -> int:
+        return sum(state.size for state in self.__state)
+
+    @staticmethod
+    def _endian(little_endian: bool) -> str:
         return "<" if little_endian else ">"
 
-    def _to_bytes(self, data: list[int] | bytes) -> bytes:
+    @staticmethod
+    def _to_bytes(data: list[int] | bytes) -> bytes:
         if isinstance(data, bytes):
             return data
         return bytes(data)
 
-    def _to_list(self, data: list[int] | bytes) -> list[int]:
+    @staticmethod
+    def _to_list(data: list[int] | bytes) -> list[int]:
         if isinstance(data, bytes):
             return list(data)
         return data
@@ -153,18 +153,29 @@ class StructDataclass:
         idx = 0
 
         for state in self.__state:
-            if isinstance(sub_struct := getattr(self, state.name), StructDataclass):
-                result_length = sub_struct.size
-                sub_struct.assign_decoded_values(data[idx:idx + result_length])
-                idx += result_length
+            attr = getattr(self, state.name)
+
+            if (isinstance(attr, list) and isinstance(attr[0], StructDataclass)) or isinstance(attr, StructDataclass):
+                if state.size == 1:
+                    sub_struct_byte_length = attr._size()
+                    attr.assign_decoded_values(data[idx : idx + sub_struct_byte_length])
+                    idx += sub_struct_byte_length
+                    continue
+
+                list_idx = 0
+                sub_struct_byte_length = attr[0]._size()
+                while list_idx < state.size:
+                    attr[list_idx].assign_decoded_values(data[idx : idx + sub_struct_byte_length])
+                    list_idx += 1
+                    idx += sub_struct_byte_length
             else:
-                if state.structtype.size == 1:
+                if state.size == 1:
                     setattr(self, state.name, data[idx])
                     idx += 1
                     continue
 
                 list_idx = 0
-                while list_idx < state.structtype.size:
+                while list_idx < state.size:
                     getattr(self, state.name)[list_idx] = data[idx]
                     list_idx += 1
                     idx += 1
@@ -181,10 +192,16 @@ class StructDataclass:
         result = []
 
         for state in self.__state:
-            if isinstance(sub_struct := getattr(self, state.name), StructDataclass):
-                result.extend(sub_struct.retrieve_values_to_encode())
+            attr = getattr(self, state.name)
+
+            if (isinstance(attr, list) and isinstance(attr[0], StructDataclass)) or isinstance(attr, StructDataclass):
+                if state.size == 1:
+                    result.extend(attr.retrieve_values_to_encode())
+                else:
+                    for item in attr:
+                        result.extend(item.retrieve_values_to_encode())
             else:
-                if state.structtype.size == 1:
+                if state.size == 1:
                     result.append(getattr(self, state.name))
                 else:
                     result.extend(getattr(self, state.name))
@@ -195,80 +212,70 @@ class StructDataclass:
         return struct.pack(self._endian(little_endian) + self.struct_fmt, *result)
 
 
-StructDataclassInstance = TypeVar("StructDataclassInstance", bound=StructDataclass)
-
-
-def struct_dataclass(cls: type[StructDataclassInstance] | None = None, /, **kwargs):
-    def inner(_cls: Any) -> type[StructDataclassInstance]:
+def struct_dataclass(cls: type[StructDataclass] | None = None, /, **kwargs):
+    def inner(_cls: Any) -> type[StructDataclass]:
         # If a dataclass is doubly decorated, metadata seems to disappear...
         if is_dataclass(_cls):
             new_cls = _cls
         else:
             # Make sure any fields without a default have one
             for k, v in inspect.get_annotations(_cls).items():
-                # TODO: Can use typing.get_args, typing.get_origin, to figure out what we're dealing with here
-                type_args = get_args(v)
-                base_typemeta = next((x for x in type_args if isinstance(x, TypeMeta)), None)
+                if inspect.isclass(v) and issubclass(v, StructDataclass):
+                    type_args = get_args(v)
+                    is_list = False
+                else:
+                    type_args = get_args(v)
+                    origin_type = (
+                        type_args[0]
+                        if inspect.isclass(type_args[0])
+                        else get_origin(type_args[0])
+                    )
+                    is_list = issubclass(origin_type, list)
+                base_type_meta = next(
+                    (x for x in type_args if isinstance(x, TypeMeta)), None
+                )
 
-                while (args := get_args(type_args[0])):
-                    type_args = args
-                base_typeinfo = next((x for x in type_args if isinstance(x, TypeInfo)), None)
-                base_type = type_args[0]
+                if len(type_args) > 1:
+                    while args := get_args(type_args[0]):
+                        type_args = args
+                base_type = next(iter(type_args), v)
 
                 # TODO: I don't know that we care about typeinfo here actually
-                if not base_typemeta or base_typemeta.size == 1:
+                if not base_type_meta or base_type_meta.size == 1:
                     # No type meta, or size is 1, we can assume it's not a list, and there is no
                     # specific default, so just instantiate it with the default value for
                     # the base type
-                    setattr(_cls, k, base_type())
-
-                print(1)
-                # if not (metadata := getattr(v, "__metadata__", [])):
-                #     if not issubclass(_cls, StructDataclass):
-                #         # We should always have metadata here
-                #         raise Exception("huh, where's the metadata?")
-                #     # We have a StructDataclass subtype here
-                #     setattr(_cls, k, field(default_factory=v))
-                # elif not isinstance(metadata[0], CStructType):
-                #     size, c = metadata
-                #     setattr(
-                #         _cls,
-                #         k,
-                #         field(
-                #             default_factory=eval(
-                #                 f"lambda: [{c.__name__}() for _ in range({size})]"
-                #             )
-                #         ),
-                #     )
-                # elif structmeta := metadata[0]:
-                #     if structmeta.size <= 0:
-                #         raise Exception("Size can't be zero or less")
-                #
-                #     if structmeta.size == 1:
-                #         # Not a list
-                #         if not getattr(_cls, k, None):
-                #             setattr(_cls, k, structmeta.default)
-                #     else:
-                #         if not isinstance(structmeta.default, list):
-                #             setattr(
-                #                 _cls,
-                #                 k,
-                #                 field(
-                #                     default_factory=eval(
-                #                         f"lambda: [deepcopy({structmeta.default}) for _ in range({structmeta.size})]",
-                #                     )
-                #                 ),
-                #             )
-                #         else:
-                #             setattr(
-                #                 _cls,
-                #                 k,
-                #                 field(
-                #                     default_factory=eval(
-                #                         f"lambda: [x for x in {structmeta.default}]"
-                #                     )
-                #                 ),
-                #             )
+                    if not getattr(_cls, k, None):
+                        default = (
+                            base_type_meta.default
+                            if (base_type_meta and base_type_meta.default)
+                            else base_type()
+                        )
+                        setattr(
+                            _cls,
+                            k,
+                            field(default_factory=eval(f"lambda: deepcopy({default})")),
+                        )
+                else:
+                    # This assumes we want multiple items of base_type, so make sure the given base_type is
+                    # properly set to be a list as well
+                    if not is_list:
+                        raise Exception("You want a list, so make it a list you dummy")
+                    # We have a meta type and the size is > 1 so make the default a field
+                    default = (
+                        base_type_meta.default
+                        if (base_type_meta and base_type_meta.default)
+                        else base_type()
+                    )
+                    setattr(
+                        _cls,
+                        k,
+                        field(
+                            default_factory=eval(
+                                f"lambda: [deepcopy({default}) for _ in range({base_type_meta.size})]"
+                            )
+                        ),
+                    )
             new_cls = dataclass(**kwargs)(_cls)
 
         return new_cls
@@ -282,154 +289,61 @@ def struct_dataclass(cls: type[StructDataclassInstance] | None = None, /, **kwar
     return inner(cls)
 
 
-all_struct_types: TypeAlias = int | float | bool | list[int] | list[float] | list[bool]
+@struct_dataclass
+class PackedPanelSettingsType(StructDataclass):
+    load_cell_low_threshold: uint8_t
+    load_cell_high_threshold: uint8_t
 
+    fsr_low_threshold: Annotated[list[uint8_t], TypeMeta(size=4)]
+    fsr_high_threshold: Annotated[list[uint8_t], TypeMeta(size=4)]
 
-@dataclass
-class CStructType:
-    size: int
-    default: all_struct_types | StructDataclass
-    format: str
-    byte_size: int
+    combined_low_threshold: uint16_t
+    combined_high_threshold: uint16_t
 
-
-def uint8_t(size: int = 1, default: int | list[int] = 0x00) -> CStructType:
-    return CStructType(size, default, "B", 1)
-
-
-def uint16_t(size: int = 1, default: int | list[int] = 0x00) -> CStructType:
-    return CStructType(size, default, "H", 2)
-
-
-@dataclass
-class TypeMeta:
-    size: int
-    default: Any
-
-
-@dataclass
-class TypeInfo:
-    format: str
-    byte_size: int
-
-
-uint8_x: TypeAlias = Annotated[int, TypeInfo('B', 1)]
+    reserved: uint16_t
 
 
 @struct_dataclass
-class Beans(StructDataclass):
-    nut: uint8_x
-
-@struct_dataclass
-class Gotem(StructDataclass):
-    a: Annotated[list[uint8_x], TypeMeta(2, 0x0F)]
-    b: uint8_x
-    c: Annotated[uint8_x, TypeMeta(1, 0x0F)]
-    d: Beans
-    e: Annotated[list[Beans], TypeMeta(2, Beans(1))]
+class RGBType(StructDataclass):
+    r: uint8_t
+    g: uint8_t
+    b: uint8_t
 
 
 @struct_dataclass
-class TestClass4(StructDataclass):
-    f: Annotated[list[int], uint8_t(size=2, default=[0x00, 0xFF])]
-    g: Annotated[int, uint8_t(default=0xFF)]
-    h: Annotated[int, uint16_t(default=0xFFFF)]
+class SMXConfigType(StructDataclass):
+    master_version: uint8_t = 0xFF
 
+    config_version: uint8_t = 0x05
 
-@struct_dataclass
-class TestClass3(StructDataclass):
-    c: Annotated[list[int], uint8_t(size=4, default=[0x00, 0x0F, 0xF0, 0xFF])]
-    d: Annotated[list[int], uint8_t(size=2)]
-    e: Annotated[list[int], uint8_t(size=3, default=0xFF)]
-    x: TestClass4
+    flags: uint8_t = 0b11  # TODO: Figure out a special bits type
 
+    debounce_no_delay_milliseconds: uint16_t = 0
+    debounce_delay_milliseconds: uint16_t = 0
+    panel_debounce_microseconds: uint16_t = 4000
+    auto_calibration_max_deviation: uint8_t = 100
+    bad_sensor_minimum_delay_seconds: uint8_t = 15
+    auto_calibration_averages_per_update: uint16_t = 60
+    auto_calibration_samples_per_average: uint16_t = 500
 
-@struct_dataclass
-class TestClass2(StructDataclass):
-    a: Annotated[int, uint8_t()]
-    b: Annotated[list[int], uint8_t(size=2, default=0x0F)]
-    z: TestClass3
+    auto_calibration_max_tare: uint16_t = 0xFFFF
 
+    # TODO: Come up with enabled_sensors struct
+    enabled_sensors: Annotated[list[uint8_t], TypeMeta(size=5)]
 
-@struct_dataclass
-class PackedPanelSettings_T(StructDataclass):
-    load_cell_low_threshold: Annotated[int, uint8_t()]
-    load_cell_high_threshold: Annotated[int, uint8_t()]
+    auto_lights_timeout: uint8_t = 1000 // 128
 
-    fsr_low_threshold: Annotated[list[int], uint8_t(size=4)]
-    fsr_high_threshold: Annotated[list[int], uint8_t(size=4)]
+    step_color: Annotated[list[RGBType], TypeMeta(size=9)]
 
-    combined_low_threshold: Annotated[int, uint16_t()]
-    combined_high_threshold: Annotated[int, uint16_t()]
+    platform_strip_color: RGBType
 
-    reserved: Annotated[int, uint16_t()]
+    # TODO: This could be a bit mask object?
+    auto_light_panel_mask: uint16_t = 0xFFFF
 
+    panel_rotation: uint8_t = 0x00
 
-# TODO: how to implement bits struct?
+    packed_panel_settings: Annotated[list[PackedPanelSettingsType], TypeMeta(size=9)]
 
+    pre_details_delay_milliseconds: uint8_t = 0x05
 
-@struct_dataclass
-class RGB_T(StructDataclass):
-    r: Annotated[int, uint8_t()]
-    g: Annotated[int, uint8_t()]
-    b: Annotated[int, uint8_t()]
-
-
-def rgb_t(size: int = 1, default: RGB_T = RGB_T()) -> CStructType:
-    return CStructType(size, default, RGB_T.struct_format(), RGB_T.byte_size())
-
-
-def packed_panel_settings_t(
-    size: int = 1, default: PackedPanelSettings_T = PackedPanelSettings_T()
-) -> CStructType:
-    return CStructType(
-        size,
-        default,
-        PackedPanelSettings_T.struct_format(),
-        PackedPanelSettings_T.byte_size(),
-    )
-
-
-@struct_dataclass
-class SMXConfig_T(StructDataclass):
-    master_version: Annotated[int, uint8_t(default=0xFF)]
-
-    config_version: Annotated[int, uint8_t(default=0x05)]
-
-    flags: Annotated[int, uint8_t(default=0b11)]  # TODO: Figure out a special bits type
-
-    debounce_no_delay_milliseconds: Annotated[int, uint16_t(default=0)]
-    debounce_delay_milliseconds: Annotated[int, uint16_t(default=0)]
-    panel_debounce_microseconds: Annotated[int, uint16_t(default=4000)]
-    auto_calibration_max_deviation: Annotated[int, uint8_t(default=100)]
-    bad_sensor_minimum_delay_seconds: Annotated[int, uint8_t(default=15)]
-    auto_calibration_averages_per_update: Annotated[int, uint16_t(default=60)]
-    auto_calibration_samples_per_average: Annotated[int, uint16_t(default=500)]
-
-    auto_calibration_max_tare: Annotated[int, uint16_t(default=0xFFFF)]
-
-    enabled_sensors: Annotated[
-        list[int], uint8_t(size=5)
-    ]  # TODO: Come up with enabled_sensors struct
-
-    auto_lights_timeout: Annotated[int, uint8_t(default=1000 // 128)]
-
-    step_color: Annotated[
-        list[RGB_T], rgb_t(size=9)
-    ]  # TODO: Need to handle lists of StructDataclasses
-
-    platform_strip_color: RGB_T
-
-    auto_light_panel_mask: Annotated[
-        int, uint16_t(default=0xFFFF)
-    ]  # TODO: This could be a bit mask object?
-
-    panel_rotation: Annotated[int, uint8_t(default=0x00)]
-
-    packed_panel_settings: Annotated[
-        list[PackedPanelSettings_T], packed_panel_settings_t(size=9)
-    ]
-
-    pre_details_delay_milliseconds: Annotated[int, uint8_t(default=0x05)]
-
-    padding: Annotated[list[int], uint8_t(size=49)]
+    padding: Annotated[list[uint8_t], TypeMeta(size=49)]
