@@ -1,6 +1,6 @@
 [tool.black]
 target-version = ["py311"]
-line-length=88
+line-length=120
 
 [tool.coverage.run]
 relative_files = true

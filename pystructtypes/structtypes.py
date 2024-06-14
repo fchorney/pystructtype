@@ -7,11 +7,22 @@ from copy import copy, deepcopy  # noqa
 
 # import struct
 from dataclasses import dataclass, field, is_dataclass
-from typing import Annotated, Any, cast, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, Callable, cast, get_args, get_origin, get_type_hints
+
 
 def list_chunks(_list: list, chunk_size: int) -> Generator[list, None, None]:
     for i in range(0, len(_list), chunk_size):
-        yield _list[i:i + chunk_size]
+        yield _list[i : i + chunk_size]
+
+
+def type_from_annotation(_type: type):
+    if (origin := get_origin(_type)) and origin is Annotated:
+        arg = None
+        t: Any = _type
+        while t := get_args(t):
+            arg = t[0]
+        return arg
+    return _type
 
 
 @dataclass
@@ -77,11 +88,7 @@ def iterate_types(cls) -> Generator[TypeIterator, None, None]:
             type_args = get_args(hint)
             is_list = False
         elif isinstance(type_args := get_args(hint), tuple) and len(type_args) > 0:
-            origin_type = (
-                type_args[0]
-                if inspect.isclass(type_args[0])
-                else get_origin(type_args[0])
-            )
+            origin_type = type_args[0] if inspect.isclass(type_args[0]) else get_origin(type_args[0])
             is_list = issubclass(origin_type, list)
         type_meta = next((x for x in type_args if isinstance(x, TypeMeta)), None)
 
@@ -115,16 +122,16 @@ class StructDataclass:
                         type_iterator.size,
                     )
                 )
-                self.struct_fmt += f"{type_iterator.size if type_iterator.size > 1 else ''}{type_iterator.type_info.format}"
+                self.struct_fmt += (
+                    f"{type_iterator.size if type_iterator.size > 1 else ''}{type_iterator.type_info.format}"
+                )
             elif issubclass(type_iterator.base_type, StructDataclass):
                 attr = getattr(self, type_iterator.key)
                 if type_iterator.is_list:
                     fmt = attr[0].struct_fmt
                 else:
                     fmt = attr.struct_fmt
-                self._state.append(
-                    StructState(type_iterator.key, fmt, type_iterator.size)
-                )
+                self._state.append(StructState(type_iterator.key, fmt, type_iterator.size))
                 self.struct_fmt += fmt * type_iterator.size
             else:
                 # We have no TypeInfo object, and we're not a StructDataclass
@@ -182,9 +189,7 @@ class StructDataclass:
         for state in self._state:
             attr = getattr(self, state.name)
 
-            if (
-                isinstance(attr, list) and isinstance(attr[0], StructDataclass)
-            ) or isinstance(attr, StructDataclass):
+            if (isinstance(attr, list) and isinstance(attr[0], StructDataclass)) or isinstance(attr, StructDataclass):
                 if state.size == 1:
                     sub_struct_byte_length = attr._size()
                     attr.assign_decoded_values(data[idx : idx + sub_struct_byte_length])
@@ -197,9 +202,7 @@ class StructDataclass:
                 list_idx = 0
                 sub_struct_byte_length = attr[0]._size()  # TODO: Fix warning here
                 while list_idx < state.size:
-                    attr[list_idx].assign_decoded_values(
-                        data[idx : idx + sub_struct_byte_length]
-                    )
+                    attr[list_idx].assign_decoded_values(data[idx : idx + sub_struct_byte_length])
                     list_idx += 1
                     idx += sub_struct_byte_length
             else:
@@ -218,9 +221,7 @@ class StructDataclass:
         data = self._to_bytes(data)
 
         # Decode
-        self.assign_decoded_values(
-            list(struct.unpack(self._endian(little_endian) + self.struct_fmt, data))
-        )
+        self.assign_decoded_values(list(struct.unpack(self._endian(little_endian) + self.struct_fmt, data)))
 
     def retrieve_values_to_encode(self) -> list[int]:
         result: list[int] = []
@@ -228,9 +229,7 @@ class StructDataclass:
         for state in self._state:
             attr = getattr(self, state.name)
 
-            if (
-                isinstance(attr, list) and isinstance(attr[0], StructDataclass)
-            ) or isinstance(attr, StructDataclass):
+            if (isinstance(attr, list) and isinstance(attr[0], StructDataclass)) or isinstance(attr, StructDataclass):
                 if state.size == 1:
                     result.extend(attr.retrieve_values_to_encode())
                 else:
@@ -266,16 +265,13 @@ def struct_dataclass(cls: type[StructDataclass] | None = None, /, **kwargs):
                     if not getattr(_cls, type_iterator.key, None):
                         default = (
                             type_iterator.type_meta.default
-                            if (
-                                type_iterator.type_meta
-                                and type_iterator.type_meta.default
-                            )
+                            if (type_iterator.type_meta and type_iterator.type_meta.default)
                             else type_iterator.base_type()
                         )
                         setattr(
                             _cls,
                             type_iterator.key,
-                            field(default_factory=eval(f"lambda: deepcopy({repr(default)})")),
+                            field(default_factory=eval(f"lambda: deepcopy({default})")),
                         )
                 else:
                     # This assumes we want multiple items of base_type, so make sure the given base_type is
@@ -329,6 +325,7 @@ class RGBType(StructDataclass):
     g: uint8_t
     b: uint8_t
 
+
 class BitsType(StructDataclass):
     _raw: Any
     _meta: Any
@@ -340,15 +337,26 @@ class BitsType(StructDataclass):
         # Combine all data in _raw as binary and convert to bools
         # TODO: Explain this bullshit and maybe make a helper function to turn bytes into lists of bools
         byte_size = self._byte_length
-        bin_data = list(map(bool, map(int, format(self._raw, f'#0{(byte_size * 8) + 2}b')[2:][::-1])))
+        bin_data = list(map(bool, map(int, format(self._raw, f"#0{(byte_size * 8) + 2}b")[2:][::-1])))
 
         for k, v in self._meta.items():
-            setattr(self, k, bin_data[v])
+            if isinstance(v, list):
+                steps = []
+                for idx in v:
+                    steps.append(bin_data[idx])
+                setattr(self, k, steps)
+            else:
+                setattr(self, k, bin_data[v])
 
     def retrieve_values_to_encode(self) -> list[int]:
         bin_data = list(itertools.repeat(False, self._byte_length * 8))
         for k, v in self._meta.items():
-            bin_data[v] = getattr(self, k)
+            if isinstance(v, list):
+                steps = getattr(self, k)
+                for idx, bit_idx in enumerate(v):
+                    bin_data[bit_idx] = steps[idx]
+            else:
+                bin_data[v] = getattr(self, k)
 
         self._raw = sum(v << i for i, v in enumerate(bin_data))
 
@@ -356,43 +364,77 @@ class BitsType(StructDataclass):
         return super().retrieve_values_to_encode()
 
 
-def bits(name: str, _type: type, definition: dict[str, int], default: bool | list[bool] = False) -> type[StructDataclass]:
-    # Create class attributes based on the definition
-    # TODO: Maybe a sanity check to make sure the definition is the right format, and no overlapping bits, etc
-    new_cls = cast(type[BitsType], type(name, (BitsType,), {}))
-    new_cls.__annotations__["_raw"] = _type  # TODO: Allow multiple bytes for the type?
-    new_cls.__annotations__["_meta"] = dict[str, int]
-    # TODO: Dunno if I need deepcopy here
-    setattr(new_cls, "_meta", field(default_factory=eval(f"lambda: deepcopy({definition})")))
+def bits(
+    *args: type[BitsType] | str | type | dict[str, int | list[int]]
+) -> Callable[[type[BitsType]], type[StructDataclass]] | type[StructDataclass]:
+    _cls: type[BitsType] | None = None
+    _type: type = uint8_t
+    definition: dict[str, int | list[int]] = {}
 
-    # TODO: Support int as a default value, and map accordingly, also implement default properly
-    for k, v in definition.items():
-        setattr(new_cls, k, False)
-        new_cls.__annotations__[k] = bool
+    if len(args) == 2:
+        _type, definition = args
+        assert isinstance(type_from_annotation(_type), type)
+        assert isinstance(definition, dict)
+    elif len(args) == 3:
+        name, _type, definition = args
+        assert isinstance(name, str)
+        assert isinstance(type_from_annotation(_type), type)
+        assert isinstance(definition, dict)
 
-    return struct_dataclass(new_cls)
+        _cls = cast(type[BitsType], type(name, (BitsType,), {}))
+    else:
+        raise Exception("You have to pass two or three arguments. GOT IT?!")
+
+    def inner(_cls: type[BitsType]) -> type[StructDataclass]:
+        # Create class attributes based on the definition
+        # TODO: Maybe a sanity check to make sure the definition is the right format, and no overlapping bits, etc
+
+        new_cls = _cls
+        new_cls.__annotations__["_raw"] = _type  # TODO: Allow multiple bytes for the type?
+        new_cls.__annotations__["_meta"] = dict[str, int]
+        # TODO: Dunno if I need deepcopy here
+        new_cls._meta = field(default_factory=eval(f"lambda: deepcopy({definition})"))
+
+        # TODO: Support int as a default value, and map accordingly, also implement default properly
+        for k, v in definition.items():
+            if isinstance(v, list):
+                setattr(
+                    new_cls,
+                    k,
+                    field(default_factory=eval(f"lambda: [False for _ in range({len(v)})]")),
+                )
+                new_cls.__annotations__[k] = list[bool]
+            else:
+                setattr(new_cls, k, False)
+                new_cls.__annotations__[k] = bool
+
+        return struct_dataclass(new_cls)
+
+    if _cls:
+        return inner(_cls)
+    return inner
 
 
-FlagsType = bits('FlagsType', uint8_t, {"autolights": 0, "fsr": 1})
+FlagsType: type[StructDataclass] = bits("FlagsType", uint8_t, {"autolights": 0, "fsr": 1})
+FT: type = FlagsType
 
-# TODO: Actually this should be a bitfield? Let's work on that next
-PanelMaskType = bits('PanelMaskType', uint16_t, {
-    "upleft": 0,
-    "up": 1,
-    "upright": 2,
-    "left": 3,
-    "center": 4,
-    "right": 5,
-    "downleft": 6,
-    "down": 7,
-    "downright": 8,
-})
 
-# Would this look better like this?
-# class FlagsType(BitsType):
-#     _raw: uint8_t
-#     autolights: Any  # Annotated[bool, Bit(0)]
-#     fsr: Any  # Annotated[bool, Bit(1)]
+@bits(uint16_t, {"_steps": [0, 1, 2, 3, 4, 5, 6, 7, 8]})
+class PanelMaskType(BitsType):
+    def __getitem__(self, index: int) -> bool:
+        # This lets us access the data with square brackets
+        # ex. `config.PanelMaskType[Panel.UP]`
+        return getattr(self, "_steps", [])[index]
+
+    def __setitem__(self, index: int, value: bool) -> None:
+        # This lets us set the data with square brackets
+        # ex. `config.PanelMaskType[Panel.DOWN] = True`
+        steps = getattr(self, "_steps", [])
+        assert index <= len(steps)
+        steps[index] = value
+
+
+# TODO: Make a BitField type
 
 
 @struct_dataclass
@@ -412,7 +454,7 @@ class EnabledSensors(StructDataclass):
 
         # 2 Panels are packed into a single uint8_t, the left most 4 bits for the first
         # and the right most 4 bits for the second
-        for bitlist in (list(map(bool, map(int, format(_byte, '#010b')[2:]))) for _byte in self._raw):
+        for bitlist in (list(map(bool, map(int, format(_byte, "#010b")[2:]))) for _byte in self._raw):
             self._data.append(bitlist[0:4])
             self._data.append(bitlist[4:])
 
@@ -438,7 +480,7 @@ class EnabledSensors(StructDataclass):
         # Only use this to set a complete set for a panel
         # ex. `config.enabled_sensors[Panel.UP] = [True, True, False, True]`
         if len(value) != 4 or not all(isinstance(x, bool) for x in value):
-            raise Exception('use the right type of data scrub')
+            raise Exception("use the right type of data scrub")
         self._data[index] = value
 
 
@@ -448,7 +490,7 @@ class SMXConfigType(StructDataclass):
 
     config_version: uint8_t = 0x05
 
-    flags: FlagsType
+    flags: FT
 
     debounce_no_delay_milliseconds: uint16_t = 0
     debounce_delay_milliseconds: uint16_t = 0
@@ -468,7 +510,7 @@ class SMXConfigType(StructDataclass):
 
     platform_strip_color: RGBType
 
-    auto_light_panel_mask:  PanelMaskType
+    auto_light_panel_mask: PanelMaskType
 
     panel_rotation: uint8_t = 0x00
 
