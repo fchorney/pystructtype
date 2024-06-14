@@ -1,5 +1,5 @@
 from pystructtypes.structtypes import SMXConfigType
-
+from enum import IntEnum
 
 # fmt: off
 config_data = [
@@ -68,11 +68,31 @@ config_data = [
 ]
 # fmt: on
 
+class Panel(IntEnum):
+    UPLEFT = 0
+    UP = 1
+    UPRIGHT = 2
+    LEFT = 3
+    CENTER = 4
+    RIGHT = 5
+    DOWNLEFT = 6
+    DOWN = 7
+    DOWNRIGHT = 8
+
+class Sensor(IntEnum):
+    LEFT = 0
+    RIGHT = 1
+    UP = 2
+    DOWN = 3
+
 
 def test_smx_config():
     c = SMXConfigType()
 
     c.decode(config_data, little_endian=True)
+
+    # c.enabled_sensors[Panel.UP][Sensor.RIGHT] = False
+    # c.flags.autolights = False
 
     e = c.encode(little_endian=True)
 
