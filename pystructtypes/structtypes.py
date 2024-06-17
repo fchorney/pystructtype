@@ -9,10 +9,12 @@ from typing import (
     Any,
     Callable,
     Generator,
+    Type,
     cast,
     get_args,
     get_origin,
     get_type_hints,
+    overload,
 )
 
 
@@ -76,12 +78,14 @@ class TypeIterator:
     type_info: TypeInfo | None
     type_meta: TypeMeta | None
     is_list: bool
+    is_pystructtype: bool
 
     @property
     def size(self):
         return getattr(self.type_meta, "size", 1)
 
 
+# TODO: Clean this up
 def iterate_types(cls) -> Generator[TypeIterator, None, None]:
     is_list = False
     for key, hint in get_type_hints(cls, include_extras=True).items():
@@ -99,7 +103,11 @@ def iterate_types(cls) -> Generator[TypeIterator, None, None]:
         type_info = next((x for x in type_args if isinstance(x, TypeInfo)), None)
         base_type = next(iter(type_args), hint)
 
-        yield TypeIterator(key, base_type, type_info, type_meta, is_list)
+        is_pystructtype = type_info is not None or (
+            inspect.isclass(base_type) and issubclass(base_type, StructDataclass)
+        )
+
+        yield TypeIterator(key, base_type, type_info, type_meta, is_list, is_pystructtype)
 
 
 @dataclass
@@ -252,80 +260,117 @@ class StructDataclass:
         return struct.pack(self._endian(little_endian) + self.struct_fmt, *result)
 
 
-def struct_dataclass(cls: type[StructDataclass] | None = None, /, **kwargs):
-    def inner(_cls: Any) -> type[StructDataclass]:
-        # If a dataclass is doubly decorated, metadata seems to disappear...
-        if is_dataclass(_cls):
-            new_cls = _cls
-        else:
-            # Make sure any fields without a default have one
-            for type_iterator in iterate_types(_cls):
-                if not type_iterator.type_meta or type_iterator.type_meta.size == 1:
-                    # No type meta, or size is 1, we can assume it's not a list, and there is no
-                    # specific default, so just instantiate it with the default value for
-                    # the base type
-                    if not getattr(_cls, type_iterator.key, None):
-                        default = (
-                            type_iterator.type_meta.default
-                            if (type_iterator.type_meta and type_iterator.type_meta.default)
-                            else type_iterator.base_type()
-                        )
-                        setattr(
-                            _cls,
-                            type_iterator.key,
-                            field(default_factory=eval(f"lambda: deepcopy({default})")),
-                        )
-                else:
-                    # This assumes we want multiple items of base_type, so make sure the given base_type is
-                    # properly set to be a list as well
-                    if not type_iterator.is_list:
-                        raise Exception("You want a list, so make it a list you dummy")
-                    # We have a meta type and the size is > 1 so make the default a field
-                    default = (
-                        type_iterator.type_meta.default
-                        if (type_iterator.type_meta and type_iterator.type_meta.default)
-                        else type_iterator.base_type()
-                    )
-                    setattr(
-                        _cls,
-                        type_iterator.key,
-                        field(
-                            default_factory=eval(
-                                f"lambda: [deepcopy({default}) for _ in range({type_iterator.type_meta.size})]"
-                            )
-                        ),
-                    )
-            new_cls = dataclass(**kwargs)(_cls)
-        return new_cls
+@overload
+def struct_dataclass(_cls: type[StructDataclass]) -> Type[StructDataclass]: ...
 
-    # See if we're being called as @struct_dataclass or @struct_dataclass()
-    if cls is None:
-        # We're called with parens.
+
+@overload
+def struct_dataclass(_cls: None) -> Callable[[type[StructDataclass]], Type[StructDataclass]]: ...
+
+
+# TODO: BIG TODO LOOK AT THIS ONE!!!
+# TODO: Determine if we actually need to use proper dataclasses?
+# TODO: Is there some way I can instantiate the dataclass with some placeholder data and then replace it later?
+# TODO: Having a hard time using fields with deferred default_factories for custom classes that don't exist yet
+# TODO: Maybe I just abandon my hacky class bullshit, and make the users define fields themselves for defaults?
+
+
+def struct_dataclass(
+    _cls: type[StructDataclass] | None = None,
+) -> Callable[[type[StructDataclass]], Type[StructDataclass]] | Type[StructDataclass]:
+    def inner(_cls: type[StructDataclass]) -> type[StructDataclass]:
+        new_cls = _cls
+
+        # new_cls should not already be a dataclass
+        if is_dataclass(new_cls):
+            return cast(type[StructDataclass], new_cls)
+
+        defaults: dict[str, Any] = {}
+
+        # Do a first pass where we just set sane defaults so dataclass doesn't get mad at us
+        for ti in iterate_types(new_cls):
+            if not ti.is_pystructtype:
+                continue
+
+            # Determine proper default for key
+            defaults[ti.key] = ti.base_type
+            if ti.type_meta and ti.type_meta.default:
+                defaults[ti.key] = ti.type_meta.default
+
+            if not ti.type_meta or ti.type_meta.size == 1:
+                if ti.is_list:
+                    raise Exception("size = 1, shouldn't be a list")
+
+                setattr(new_cls, ti.key, field(default=0))
+            else:
+                if not ti.is_list:
+                    raise Exception("this should be a list dunko")
+
+                setattr(new_cls, ti.key, field(default_factory=list))
+
+        # TODO: Am I getting anything out of this being a dataclass?
+        newer_cls = dataclass(new_cls)
+
+        return newer_cls
+        # tester = """
+        # # Make sure any fields without a default have one
+        # for type_iterator in iterate_types(new_cls):
+        #     if not type_iterator.is_pystructtype:
+        #         continue
+        #
+        #     if not type_iterator.type_meta or type_iterator.type_meta.size == 1:
+        #         if type_iterator.is_list:
+        #             raise Exception("You said this should be size 1, so this shouldn't be a list")
+        #
+        #         # Set a default if it does not yet exist
+        #         if not getattr(new_cls, type_iterator.key, None):
+        #             default = type_iterator.base_type
+        #             if type_iterator.type_meta and type_iterator.type_meta.default:
+        #                 default = type_iterator.type_meta.default
+        #                 if isinstance(default, list):
+        #                     raise Exception("A default for a size 1 should not be a list")
+        #
+        #             # Create a new instance of the class
+        #             if inspect.isclass(default):
+        #                 default = default()
+        #
+        #             setattr(
+        #                 new_cls,
+        #                 type_iterator.key,
+        #                 default,
+        #             )
+        #     else:
+        #         # This assumes we want multiple items of base_type, so make sure the given base_type is
+        #         # properly set to be a list as well
+        #         if not type_iterator.is_list:
+        #             raise Exception("You want a list, so make it a list you dummy")
+        #
+        #         # We have a meta type and the size is > 1 so make the default a field
+        #         default = type_iterator.base_type
+        #         if type_iterator.type_meta and type_iterator.type_meta.default:
+        #             default = type_iterator.type_meta.default
+        #
+        #         default_list = []
+        #         if isinstance(default, list):
+        #             pass
+        #         else:
+        #             # Create a new instance of the class
+        #             if inspect.isclass(default):
+        #                 default_list = [default() for _ in range(type_iterator.type_meta.size)]
+        #             else:
+        #                 default_list = [default for _ in range(type_iterator.type_meta.size)]
+        #
+        #         setattr(
+        #             new_cls,
+        #             type_iterator.key,
+        #             default_list,
+        #         )
+        # return dataclass()(new_cls)
+        # """
+
+    if _cls is None:
         return inner
-
-    # We're called as @struct_dataclass without parens.
-    return inner(cls)
-
-
-@struct_dataclass
-class PackedPanelSettingsType(StructDataclass):
-    load_cell_low_threshold: uint8_t
-    load_cell_high_threshold: uint8_t
-
-    fsr_low_threshold: Annotated[list[uint8_t], TypeMeta(size=4)]
-    fsr_high_threshold: Annotated[list[uint8_t], TypeMeta(size=4)]
-
-    combined_low_threshold: uint16_t
-    combined_high_threshold: uint16_t
-
-    reserved: uint16_t
-
-
-@struct_dataclass
-class RGBType(StructDataclass):
-    r: uint8_t
-    g: uint8_t
-    b: uint8_t
+    return inner(_cls)
 
 
 class BitsType(StructDataclass):
@@ -404,106 +449,3 @@ def bits(name: str, _type: type, definition: dict[str, int | list[int]]) -> type
     _cls = cast(type[BitsType], type(name, (BitsType,), {}))  # type: ignore
     new_cls = bits_cls(type, definition)(_cls)
     return cast(type[StructDataclass], new_cls)
-
-
-@bits_cls(uint8_t, {"autolights": 0, "fsr": 1})
-class FlagsType(BitsType): ...
-
-
-@bits_cls(uint16_t, {"_steps": [0, 1, 2, 3, 4, 5, 6, 7, 8]})
-class PanelMaskType(BitsType):
-    def __getitem__(self, index: int) -> bool:
-        # This lets us access the data with square brackets
-        # ex. `config.PanelMaskType[Panel.UP]`
-        return getattr(self, "_steps", [])[index]
-
-    def __setitem__(self, index: int, value: bool) -> None:
-        # This lets us set the data with square brackets
-        # ex. `config.PanelMaskType[Panel.DOWN] = True`
-        steps = getattr(self, "_steps", [])
-        assert index <= len(steps)
-        steps[index] = value
-
-
-@struct_dataclass
-class EnabledSensors(StructDataclass):
-    # We can define the actual data we are ingesting here
-    _raw: Annotated[list[uint8_t], TypeMeta(size=5)]
-
-    # We use this to store the data in the way we actually want
-    _data: list[list[bool]] = field(default_factory=list)
-
-    def assign_decoded_values(self, data: list[int]) -> None:
-        # First call the super function to put the values in to _raw
-        super().assign_decoded_values(data)
-
-        # Erase everything in self._data to remove any old data
-        self._data = []
-
-        # 2 Panels are packed into a single uint8_t, the left most 4 bits for the first
-        # and the right most 4 bits for the second
-        for bitlist in (list(map(bool, map(int, format(_byte, "#010b")[2:]))) for _byte in self._raw):
-            self._data.append(bitlist[0:4])
-            self._data.append(bitlist[4:])
-
-        # Remove the last item in self._data as there are only 9 panels
-        del self._data[-1]
-
-    def retrieve_values_to_encode(self) -> list[int]:
-        # Modify self._raw with updates values from self._data
-        for idx, items in enumerate(list_chunks(self._data, 2)):
-            # Last chunk
-            if len(items) == 1:
-                items.append([False, False, False, False])
-            self._raw[idx] = sum(v << i for i, v in enumerate(list(itertools.chain.from_iterable(items))[::-1]))
-        # Run the super function to return the data in self._raw()
-        return super().retrieve_values_to_encode()
-
-    def __getitem__(self, index: int) -> list[bool]:
-        # This let's us access the data with square brackets
-        # ex. `config.enabled_sensors[Panel.UP][Sensor.RIGHT]`
-        return self._data[index]
-
-    def __setitem__(self, index: int, value: list[bool]) -> None:
-        # Only use this to set a complete set for a panel
-        # ex. `config.enabled_sensors[Panel.UP] = [True, True, False, True]`
-        if len(value) != 4 or not all(isinstance(x, bool) for x in value):
-            raise Exception("use the right type of data scrub")
-        self._data[index] = value
-
-
-@struct_dataclass
-class SMXConfigType(StructDataclass):
-    master_version: uint8_t = 0xFF
-
-    config_version: uint8_t = 0x05
-
-    flags: FlagsType
-
-    debounce_no_delay_milliseconds: uint16_t = 0
-    debounce_delay_milliseconds: uint16_t = 0
-    panel_debounce_microseconds: uint16_t = 4000
-    auto_calibration_max_deviation: uint8_t = 100
-    bad_sensor_minimum_delay_seconds: uint8_t = 15
-    auto_calibration_averages_per_update: uint16_t = 60
-    auto_calibration_samples_per_average: uint16_t = 500
-
-    auto_calibration_max_tare: uint16_t = 0xFFFF
-
-    enabled_sensors: EnabledSensors
-
-    auto_lights_timeout: uint8_t = 1000 // 128
-
-    step_color: Annotated[list[RGBType], TypeMeta(size=9)]
-
-    platform_strip_color: RGBType
-
-    auto_light_panel_mask: PanelMaskType
-
-    panel_rotation: uint8_t = 0x00
-
-    packed_panel_settings: Annotated[list[PackedPanelSettingsType], TypeMeta(size=9)]
-
-    pre_details_delay_milliseconds: uint8_t = 0x05
-
-    padding: Annotated[list[uint8_t], TypeMeta(size=49)]
