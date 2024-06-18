@@ -238,3 +238,24 @@ def test_smx_config():
     e = c.encode(little_endian=True)
 
     assert c._to_list(e) == config_data
+
+
+def test_sd():
+    @struct_dataclass
+    class Test(StructDataclass):
+        foo: Annotated[list[uint8_t], TypeMeta(size=2, default=4)]
+
+    @struct_dataclass
+    class Test2(StructDataclass):
+        bar: Annotated[list[Test], TypeMeta(size=2)]
+        baz: uint8_t
+        zap: Annotated[list[Test], TypeMeta(size=2)]
+
+    data2 = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+    c = Test2()
+
+    c.decode(data2)
+    e = c.encode()
+
+    assert c._to_list(e) == data2

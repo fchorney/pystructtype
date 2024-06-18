@@ -122,7 +122,7 @@ class StructDataclass:
         self._state: list[StructState] = []
         # Grab Struct Format
         self.struct_fmt = ""
-        for type_iterator in iterate_types(self):
+        for type_iterator in iterate_types(self.__class__):
             if type_iterator.type_info:
                 self._state.append(
                     StructState(
@@ -260,19 +260,36 @@ class StructDataclass:
         return struct.pack(self._endian(little_endian) + self.struct_fmt, *result)
 
 
+# TODO: BIG TODO LOOK AT THIS ONE!!!
+# TODO: Determine if we actually need to use proper dataclasses?
+# TODO: Is there some way I can instantiate the dataclass with some placeholder data and then replace it later?
+# TODO: Having a hard time using fields with deferred default_factories for custom classes that don't exist yet
+# TODO: Maybe I just abandon my hacky class bullshit, and make the users define fields themselves for defaults?
+
+
+# XXX: This is how class decorators essentially work
+# @foo
+# class gotem(): ...
+#
+# is equal to: foo(gotem)
+#
+# @foo()
+# class gotem(): ...
+#
+# is equal to: foo()(gotem)
+#
+# @foo(bar=2)
+# class gotem(): ...
+#
+# is equal to: foo(bar=2)(gotem)
+
+
 @overload
 def struct_dataclass(_cls: type[StructDataclass]) -> Type[StructDataclass]: ...
 
 
 @overload
 def struct_dataclass(_cls: None) -> Callable[[type[StructDataclass]], Type[StructDataclass]]: ...
-
-
-# TODO: BIG TODO LOOK AT THIS ONE!!!
-# TODO: Determine if we actually need to use proper dataclasses?
-# TODO: Is there some way I can instantiate the dataclass with some placeholder data and then replace it later?
-# TODO: Having a hard time using fields with deferred default_factories for custom classes that don't exist yet
-# TODO: Maybe I just abandon my hacky class bullshit, and make the users define fields themselves for defaults?
 
 
 def struct_dataclass(
@@ -285,88 +302,95 @@ def struct_dataclass(
         if is_dataclass(new_cls):
             return cast(type[StructDataclass], new_cls)
 
-        defaults: dict[str, Any] = {}
-
-        # Do a first pass where we just set sane defaults so dataclass doesn't get mad at us
-        for ti in iterate_types(new_cls):
-            if not ti.is_pystructtype:
-                continue
-
-            # Determine proper default for key
-            defaults[ti.key] = ti.base_type
-            if ti.type_meta and ti.type_meta.default:
-                defaults[ti.key] = ti.type_meta.default
-
-            if not ti.type_meta or ti.type_meta.size == 1:
-                if ti.is_list:
-                    raise Exception("size = 1, shouldn't be a list")
-
-                setattr(new_cls, ti.key, field(default=0))
-            else:
-                if not ti.is_list:
-                    raise Exception("this should be a list dunko")
-
-                setattr(new_cls, ti.key, field(default_factory=list))
-
-        # TODO: Am I getting anything out of this being a dataclass?
-        newer_cls = dataclass(new_cls)
-
-        return newer_cls
-        # tester = """
-        # # Make sure any fields without a default have one
-        # for type_iterator in iterate_types(new_cls):
-        #     if not type_iterator.is_pystructtype:
+        # defaults: dict[str, Any] = {}
+        #
+        # # Do a first pass where we just set sane defaults so dataclass doesn't get mad at us
+        # for ti in iterate_types(new_cls):
+        #     if not ti.is_pystructtype:
         #         continue
         #
-        #     if not type_iterator.type_meta or type_iterator.type_meta.size == 1:
-        #         if type_iterator.is_list:
-        #             raise Exception("You said this should be size 1, so this shouldn't be a list")
+        #     # Determine proper default for key
+        #     defaults[ti.key] = ti.base_type
+        #     if ti.type_meta and ti.type_meta.default:
+        #         defaults[ti.key] = ti.type_meta.default
         #
-        #         # Set a default if it does not yet exist
-        #         if not getattr(new_cls, type_iterator.key, None):
-        #             default = type_iterator.base_type
-        #             if type_iterator.type_meta and type_iterator.type_meta.default:
-        #                 default = type_iterator.type_meta.default
-        #                 if isinstance(default, list):
-        #                     raise Exception("A default for a size 1 should not be a list")
+        #     if not ti.type_meta or ti.type_meta.size == 1:
+        #         if ti.is_list:
+        #             raise Exception("size = 1, shouldn't be a list")
         #
-        #             # Create a new instance of the class
-        #             if inspect.isclass(default):
-        #                 default = default()
-        #
-        #             setattr(
-        #                 new_cls,
-        #                 type_iterator.key,
-        #                 default,
-        #             )
+        #         setattr(new_cls, ti.key, field(default=0))
         #     else:
-        #         # This assumes we want multiple items of base_type, so make sure the given base_type is
-        #         # properly set to be a list as well
-        #         if not type_iterator.is_list:
-        #             raise Exception("You want a list, so make it a list you dummy")
+        #         if not ti.is_list:
+        #             raise Exception("this should be a list dunko")
         #
-        #         # We have a meta type and the size is > 1 so make the default a field
-        #         default = type_iterator.base_type
-        #         if type_iterator.type_meta and type_iterator.type_meta.default:
-        #             default = type_iterator.type_meta.default
+        #         setattr(new_cls, ti.key, field(default_factory=list))
         #
-        #         default_list = []
-        #         if isinstance(default, list):
-        #             pass
-        #         else:
-        #             # Create a new instance of the class
-        #             if inspect.isclass(default):
-        #                 default_list = [default() for _ in range(type_iterator.type_meta.size)]
-        #             else:
-        #                 default_list = [default for _ in range(type_iterator.type_meta.size)]
+        # # TODO: Am I getting anything out of this being a dataclass?
+        # newer_cls = dataclass(new_cls)
         #
-        #         setattr(
-        #             new_cls,
-        #             type_iterator.key,
-        #             default_list,
-        #         )
-        # return dataclass()(new_cls)
-        # """
+        # return newer_cls
+
+        # Make sure any fields without a default have one
+        for type_iterator in iterate_types(new_cls):
+            if not type_iterator.is_pystructtype:
+                continue
+
+            if not type_iterator.type_meta or type_iterator.type_meta.size == 1:
+                if type_iterator.is_list:
+                    raise Exception("You said this should be size 1, so this shouldn't be a list")
+
+                # Set a default if it does not yet exist
+                if not getattr(new_cls, type_iterator.key, None):
+                    default = type_iterator.base_type
+                    if type_iterator.type_meta and type_iterator.type_meta.default:
+                        default = type_iterator.type_meta.default
+                        if isinstance(default, list):
+                            raise Exception("A default for a size 1 should not be a list")
+
+                    # Create a new instance of the class
+                    if inspect.isclass(default):
+                        default = field(default_factory=lambda d=default: d())
+                    else:
+                        default = field(default_factory=lambda d=default: deepcopy(d))
+
+                    setattr(
+                        new_cls,
+                        type_iterator.key,
+                        default,
+                    )
+            else:
+                # This assumes we want multiple items of base_type, so make sure the given base_type is
+                # properly set to be a list as well
+                if not type_iterator.is_list:
+                    raise Exception("You want a list, so make it a list you dummy")
+
+                # We have a meta type and the size is > 1 so make the default a field
+                default = type_iterator.base_type
+                if type_iterator.type_meta and type_iterator.type_meta.default:
+                    default = type_iterator.type_meta.default
+
+                default_list = []
+                if isinstance(default, list):
+                    pass
+                else:
+                    # Create a new instance of the class
+                    if inspect.isclass(default):
+                        default_list = field(
+                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [d() for _ in range(s)]
+                        )
+                    else:
+                        default_list = field(
+                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [
+                                deepcopy(d) for _ in range(s)
+                            ]
+                        )
+
+                setattr(
+                    new_cls,
+                    type_iterator.key,
+                    default_list,
+                )
+        return cast(type[StructDataclass], dataclass(new_cls))
 
     if _cls is None:
         return inner
