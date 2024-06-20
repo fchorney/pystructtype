@@ -2,6 +2,7 @@ import inspect
 import itertools
 import re
 import struct
+import types
 from copy import deepcopy  # noqa
 from dataclasses import dataclass, field, is_dataclass
 from typing import (
@@ -260,13 +261,6 @@ class StructDataclass:
         return struct.pack(self._endian(little_endian) + self.struct_fmt, *result)
 
 
-# TODO: BIG TODO LOOK AT THIS ONE!!!
-# TODO: Determine if we actually need to use proper dataclasses?
-# TODO: Is there some way I can instantiate the dataclass with some placeholder data and then replace it later?
-# TODO: Having a hard time using fields with deferred default_factories for custom classes that don't exist yet
-# TODO: Maybe I just abandon my hacky class bullshit, and make the users define fields themselves for defaults?
-
-
 # XXX: This is how class decorators essentially work
 # @foo
 # class gotem(): ...
@@ -302,34 +296,6 @@ def struct_dataclass(
         if is_dataclass(new_cls):
             return cast(type[StructDataclass], new_cls)
 
-        # defaults: dict[str, Any] = {}
-        #
-        # # Do a first pass where we just set sane defaults so dataclass doesn't get mad at us
-        # for ti in iterate_types(new_cls):
-        #     if not ti.is_pystructtype:
-        #         continue
-        #
-        #     # Determine proper default for key
-        #     defaults[ti.key] = ti.base_type
-        #     if ti.type_meta and ti.type_meta.default:
-        #         defaults[ti.key] = ti.type_meta.default
-        #
-        #     if not ti.type_meta or ti.type_meta.size == 1:
-        #         if ti.is_list:
-        #             raise Exception("size = 1, shouldn't be a list")
-        #
-        #         setattr(new_cls, ti.key, field(default=0))
-        #     else:
-        #         if not ti.is_list:
-        #             raise Exception("this should be a list dunko")
-        #
-        #         setattr(new_cls, ti.key, field(default_factory=list))
-        #
-        # # TODO: Am I getting anything out of this being a dataclass?
-        # newer_cls = dataclass(new_cls)
-        #
-        # return newer_cls
-
         # Make sure any fields without a default have one
         for type_iterator in iterate_types(new_cls):
             if not type_iterator.is_pystructtype:
@@ -349,9 +315,9 @@ def struct_dataclass(
 
                     # Create a new instance of the class
                     if inspect.isclass(default):
-                        default = field(default_factory=lambda d=default: d())
+                        default = field(default_factory=lambda d=default: d())  # type: ignore
                     else:
-                        default = field(default_factory=lambda d=default: deepcopy(d))
+                        default = field(default_factory=lambda d=default: deepcopy(d))  # type: ignore
 
                     setattr(
                         new_cls,
@@ -376,11 +342,11 @@ def struct_dataclass(
                     # Create a new instance of the class
                     if inspect.isclass(default):
                         default_list = field(
-                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [d() for _ in range(s)]
+                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [d() for _ in range(s)]  # type: ignore
                         )
                     else:
                         default_list = field(
-                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [
+                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
                                 deepcopy(d) for _ in range(s)
                             ]
                         )
@@ -399,7 +365,13 @@ def struct_dataclass(
 
 class BitsType(StructDataclass):
     _raw: Any
-    _meta: Any
+    _meta: dict
+    _meta_tuple: tuple
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        self._meta = {k: v for k, v in zip(*self._meta_tuple)}
 
     def assign_decoded_values(self, data: list[int]) -> None:
         # First call the super function to put the values in to _raw
@@ -441,27 +413,53 @@ def bits_cls(_type: type, definition: dict[str, int | list[int]]) -> Callable[[t
         # TODO: Maybe a sanity check to make sure the definition is the right format, and no overlapping bits, etc
 
         new_cls = _cls
+
         new_cls.__annotations__["_raw"] = _type  # TODO: Allow multiple bytes for the type?
+
+        new_cls._meta = field(default_factory=dict)
         new_cls.__annotations__["_meta"] = dict[str, int]
-        # TODO: Dunno if I need deepcopy here
-        new_cls._meta = field(default_factory=eval(f"lambda: deepcopy({definition})"))
+
+        # Convert the definition to a named tuple so it's Immutable
+        meta_tuple = (tuple(definition.keys()), tuple(definition.values()))
+        new_cls._meta_tuple = field(default_factory=lambda d=meta_tuple: d)  # type: ignore
+        new_cls.__annotations__["_meta_tuple"] = tuple
 
         # TODO: Support int as a default value, and map accordingly, also implement default properly
-        for k, v in definition.items():
-            if isinstance(v, list):
-                setattr(
-                    new_cls,
-                    k,
-                    field(default_factory=eval(f"lambda: [False for _ in range({len(v)})]")),
-                )
-                new_cls.__annotations__[k] = list[bool]
+        for key, value in definition.items():
+            if isinstance(value, list):
+                setattr(new_cls, key, field(default_factory=lambda v=len(value): [False for _ in range(v)]))  # type: ignore
+                new_cls.__annotations__[key] = list[bool]
             else:
-                setattr(new_cls, k, False)
-                new_cls.__annotations__[k] = bool
+                setattr(new_cls, key, False)
+                new_cls.__annotations__[key] = bool
 
         return struct_dataclass(new_cls)
 
     return inner
+
+
+# XXX: This is how class decorators essentially work
+# @foo
+# class gotem(): ...
+#
+# is equal to: foo(gotem)
+#
+# @foo()
+# class gotem(): ...
+#
+# is equal to: foo()(gotem)
+#
+# @foo(bar=2)
+# class gotem(): ...
+#
+# is equal to: foo(bar=2)(gotem)
+
+
+# Turn
+# @bits_cls(uint8_t, {"autolights": 0, "fsr": 1})
+# class FlagsType(BitsType): ...
+# into
+# FlagsType = bits("FlagsType", uint8_t, {"autolights": 0, "fsr": 1})
 
 
 def bits(name: str, _type: type, definition: dict[str, int | list[int]]) -> type[StructDataclass]:
@@ -470,6 +468,6 @@ def bits(name: str, _type: type, definition: dict[str, int | list[int]]) -> type
     # For reference, the function *should* look like:
     # FlagsType = bits("FlagsType", uint8_t, {"autolights": 0, "fsr": 1})
 
-    _cls = cast(type[BitsType], type(name, (BitsType,), {}))  # type: ignore
-    new_cls = bits_cls(type, definition)(_cls)
-    return cast(type[StructDataclass], new_cls)
+    _cls = cast(type[BitsType], types.new_class(name, (BitsType,)))
+    new_cls = bits_cls(_type, definition)(_cls)
+    return new_cls

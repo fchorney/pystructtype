@@ -106,17 +106,21 @@ class Sensor(IntEnum):
 class FlagsType(BitsType): ...
 
 
-@bits_cls(uint16_t, {"_steps": [0, 1, 2, 3, 4, 5, 6, 7, 8]})
+# TODO: Why doesn't this work with mypy?
+# FlagsType = bits("FlagsType", uint8_t, {"autolights": 0, "fsr": 1})
+
+
+@bits_cls(uint16_t, {"steps": [0, 1, 2, 3, 4, 5, 6, 7, 8]})
 class PanelMaskType(BitsType):
     def __getitem__(self, index: int) -> bool:
         # This lets us access the data with square brackets
         # ex. `config.PanelMaskType[Panel.UP]`
-        return getattr(self, "_steps", [])[index]
+        return getattr(self, "steps", [])[index]
 
     def __setitem__(self, index: int, value: bool) -> None:
         # This lets us set the data with square brackets
         # ex. `config.PanelMaskType[Panel.DOWN] = True`
-        steps = getattr(self, "_steps", [])
+        steps = getattr(self, "steps", [])
         assert index <= len(steps)
         steps[index] = value
 
