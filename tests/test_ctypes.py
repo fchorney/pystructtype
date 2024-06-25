@@ -7,7 +7,7 @@ from pystructtypes.structtypes import (
     BitsType,
     StructDataclass,
     TypeMeta,
-    bits_cls,
+    bits,
     list_chunks,
     struct_dataclass,
     uint8_t,
@@ -102,15 +102,11 @@ class Sensor(IntEnum):
     DOWN = 3
 
 
-@bits_cls(uint8_t, {"autolights": 0, "fsr": 1})
+@bits(uint8_t, {"autolights": 0, "fsr": 1})
 class FlagsType(BitsType): ...
 
 
-# TODO: Why doesn't this work with mypy?
-# FlagsType = bits("FlagsType", uint8_t, {"autolights": 0, "fsr": 1})
-
-
-@bits_cls(uint16_t, {"steps": [0, 1, 2, 3, 4, 5, 6, 7, 8]})
+@bits(uint16_t, {"steps": [0, 1, 2, 3, 4, 5, 6, 7, 8]})
 class PanelMaskType(BitsType):
     def __getitem__(self, index: int) -> bool:
         # This lets us access the data with square brackets

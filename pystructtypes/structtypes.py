@@ -2,14 +2,13 @@ import inspect
 import itertools
 import re
 import struct
-import types
-from copy import deepcopy  # noqa
+from collections.abc import Generator
+from copy import deepcopy
 from dataclasses import dataclass, field, is_dataclass
 from typing import (
     Annotated,
     Any,
     Callable,
-    Generator,
     Type,
     cast,
     get_args,
@@ -19,18 +18,35 @@ from typing import (
 )
 
 
-def list_chunks(_list: list, chunk_size: int) -> Generator[list, None, None]:
-    for i in range(0, len(_list), chunk_size):
-        yield _list[i : i + chunk_size]
+def list_chunks(_list: list, n: int) -> Generator[list, None, None]:
+    """
+    Yield successive n-sized chunks from a list.
+    :param _list: List to chunk out
+    :param n: Size of chunks
+    :return: Generator of n-sized chunks of _list
+    """
+    yield from (_list[i : i + n] for i in range(0, len(_list), n))
 
 
-def type_from_annotation(_type: type):
+def type_from_annotation(_type: type) -> type:
+    """
+    Find the base type from an Annotated type, or return it unchanged if
+    not Annotated
+    :param _type: Type to check
+    :return: Annotated base type or the given type if not Annotated
+    """
+    # If we have an origin for the given type, and it's Annotated
     if (origin := get_origin(_type)) and origin is Annotated:
-        arg = None
+        # Keep running `get_args` on the first element of whatever
+        # `get_args` returns, until we get nothing back
+        arg = _type
         t: Any = _type
         while t := get_args(t):
             arg = t[0]
+
+        # This will be the base type
         return arg
+    # No origin, or the origin is not Annotated, just return the given type
     return _type
 
 
@@ -47,14 +63,14 @@ class TypeInfo:
 
 
 # Fixed Size Types
-# int8_t = Annotated[int, "b"]  # 1 Byte
+int8_t = Annotated[int, TypeInfo("b", 1)]
 uint8_t = Annotated[int, TypeInfo("B", 1)]
-# int16_t = Annotated[int, "h"]  # 2 Bytes
+int16_t = Annotated[int, TypeInfo("h", 2)]
 uint16_t = Annotated[int, TypeInfo("H", 2)]
-# int32_t = Annotated[int, "i"]  # 4 Bytes
-# uint32_t = Annotated[int, "I"]  # 4 Bytes
-# int64_t = Annotated[int, "q"]  # 8 Bytes
-# uint64_t = Annotated[int, "Q"]  # 8 Bytes
+int32_t = Annotated[int, TypeInfo("i", 4)]
+uint32_t = Annotated[int, TypeInfo("I", 4)]
+int64_t = Annotated[int, TypeInfo("q", 8)]
+uint64_t = Annotated[int, TypeInfo("Q", 8)]
 
 # Named Types
 # char: TypeAlias = Annotated[int, "b"]  # 1 Byte
@@ -88,22 +104,34 @@ class TypeIterator:
 
 # TODO: Clean this up
 def iterate_types(cls) -> Generator[TypeIterator, None, None]:
-    is_list = False
     for key, hint in get_type_hints(cls, include_extras=True).items():
-        if inspect.isclass(hint) and issubclass(hint, StructDataclass):
-            type_args = get_args(hint)
-            is_list = False
-        elif isinstance(type_args := get_args(hint), tuple) and len(type_args) > 0:
-            origin_type = type_args[0] if inspect.isclass(type_args[0]) else get_origin(type_args[0])
-            is_list = issubclass(origin_type, list)
+        # Grab the base type from a possibly annotated type hint
+        base_type = type_from_annotation(hint)
+
+        # Determine if the type is a list
+        # ex. list[bool] (yes) vs bool (no)
+        is_list = issubclass(origin, list) if (origin := get_origin(base_type)) else False
+
+        # Grab the type hints top args and look for any TypeMeta objects
+        type_args = get_args(hint)
         type_meta = next((x for x in type_args if isinstance(x, TypeMeta)), None)
 
-        if len(type_args) > 1:
+        # type_args has the possibility of being nested within more tuples
+        # drill down the type_args until we hit empty, then we know we're at the bottom
+        # which is where type_info will exist
+        if type_args and len(type_args) > 1:
             while args := get_args(type_args[0]):
                 type_args = args
-        type_info = next((x for x in type_args if isinstance(x, TypeInfo)), None)
-        base_type = next(iter(type_args), hint)
 
+        # Find the TypeInfo object on the lowest rung of the type_args
+        type_info = next((x for x in type_args if isinstance(x, TypeInfo)), None)
+
+        # At this point we may have possibly drilled down into `type_args` to find the true base type
+        if type_args:
+            base_type = type_from_annotation(type_args[0])
+
+        # Determine if we are a subclass of a pystructtype
+        # If we have a type_info object in the Annotation, or we're actually a subtype of StructDataclass
         is_pystructtype = type_info is not None or (
             inspect.isclass(base_type) and issubclass(base_type, StructDataclass)
         )
@@ -363,6 +391,29 @@ def struct_dataclass(
     return inner(_cls)
 
 
+def int_to_bool_list(data: int, byte_length: int) -> list[bool]:
+    """
+    Converts integer into a list of bools representing the bits
+    ex. ord("A") = [False, True, False, False, False, False, False, True]
+
+    :param data: Integer to be converted
+    :param byte_length: Number of bytes to extract from integer
+    :return: List of bools representing each bit in the data
+    """
+
+    # The amount of bits we end up with will be the number of bytes we expect in the int times 8 (8 bits in a byte)
+    # For example uint8_t would have 1 byte, but uint16_t would have 2 bytes
+    byte_size = byte_length * 8
+    # Convert the int in to a string of bits (add 2 to account for the `0b` prefix)
+    bit_str = format(data, f"#0{byte_size + 2}b")
+    # Cut off the `0b` prefix of the bit string, and reverse it
+    bit_str = bit_str.removeprefix("0b")[::-1]
+    # Convert the bit_str to a list of ints
+    bit_list = map(int, bit_str)
+    # Convert the bit list to bools and return
+    return list(map(bool, bit_list))
+
+
 class BitsType(StructDataclass):
     _raw: Any
     _meta: dict
@@ -378,9 +429,7 @@ class BitsType(StructDataclass):
         super().assign_decoded_values(data)
 
         # Combine all data in _raw as binary and convert to bools
-        # TODO: Explain this bullshit and maybe make a helper function to turn bytes into lists of bools
-        byte_size = self._byte_length
-        bin_data = list(map(bool, map(int, format(self._raw, f"#0{(byte_size * 8) + 2}b")[2:][::-1])))
+        bin_data = int_to_bool_list(self._raw, self._byte_length)
 
         for k, v in self._meta.items():
             if isinstance(v, list):
@@ -407,24 +456,29 @@ class BitsType(StructDataclass):
         return super().retrieve_values_to_encode()
 
 
-def bits_cls(_type: type, definition: dict[str, int | list[int]]) -> Callable[[type[BitsType]], type[StructDataclass]]:
+def bits(_type: type, definition: dict[str, int | list[int]]) -> Callable[[type[BitsType]], type[StructDataclass]]:
     def inner(_cls: type[BitsType]) -> type[StructDataclass]:
         # Create class attributes based on the definition
         # TODO: Maybe a sanity check to make sure the definition is the right format, and no overlapping bits, etc
 
         new_cls = _cls
 
-        new_cls.__annotations__["_raw"] = _type  # TODO: Allow multiple bytes for the type?
+        # TODO: Allow list of bytes for the type?
+        # TODO: Such as `Annotated[list[uint8_t], TypeMeta(size=5)]`
+        new_cls.__annotations__["_raw"] = _type
 
         new_cls._meta = field(default_factory=dict)
         new_cls.__annotations__["_meta"] = dict[str, int]
 
-        # Convert the definition to a named tuple so it's Immutable
+        # Convert the definition to a named tuple, so it's Immutable
         meta_tuple = (tuple(definition.keys()), tuple(definition.values()))
         new_cls._meta_tuple = field(default_factory=lambda d=meta_tuple: d)  # type: ignore
         new_cls.__annotations__["_meta_tuple"] = tuple
 
-        # TODO: Support int as a default value, and map accordingly, also implement default properly
+        # TODO: Support int, or list of ints as defaults
+        # TODO: Support dict, and dict of lists, or list of dicts, etc for definition
+        # TODO: ex. definition = {"a": {"b": 0, "c": [1, 2, 3]}, "d": [4, 5, 6], "e": {"f": 7}}
+        # TODO: Can't decide if the line above this is a good idea or not
         for key, value in definition.items():
             if isinstance(value, list):
                 setattr(new_cls, key, field(default_factory=lambda v=len(value): [False for _ in range(v)]))  # type: ignore
@@ -453,21 +507,3 @@ def bits_cls(_type: type, definition: dict[str, int | list[int]]) -> Callable[[t
 # class gotem(): ...
 #
 # is equal to: foo(bar=2)(gotem)
-
-
-# Turn
-# @bits_cls(uint8_t, {"autolights": 0, "fsr": 1})
-# class FlagsType(BitsType): ...
-# into
-# FlagsType = bits("FlagsType", uint8_t, {"autolights": 0, "fsr": 1})
-
-
-def bits(name: str, _type: type, definition: dict[str, int | list[int]]) -> type[StructDataclass]:
-    # TODO: Figure out why this doesn't work with MYPY, very frustrating
-
-    # For reference, the function *should* look like:
-    # FlagsType = bits("FlagsType", uint8_t, {"autolights": 0, "fsr": 1})
-
-    _cls = cast(type[BitsType], types.new_class(name, (BitsType,)))
-    new_cls = bits_cls(_type, definition)(_cls)
-    return new_cls
