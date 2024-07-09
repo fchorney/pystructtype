@@ -259,3 +259,19 @@ def test_sd():
     e = c.encode()
 
     assert c._to_list(e) == data2
+
+
+def test_bits():
+    # TODO: Fix issue where `Annotated` isn't actually a `type`
+    @bits(Annotated[list[uint8_t], TypeMeta(size=2)], {"a": 0, "b": 4, "c": 11, "d": 15})
+    class BitsTest(BitsType): ...
+
+    data = [0b1000_1000, 0b0001_0001]
+
+    c = BitsTest()
+
+    c.decode(data)
+
+    e = c.encode()
+
+    assert c._to_list(e) == data

@@ -356,25 +356,34 @@ def struct_dataclass(
     return inner(_cls)
 
 
-def int_to_bool_list(data: int, byte_length: int) -> list[bool]:
+def int_to_bool_list(data: int | list[int], byte_length: int) -> list[bool]:
     """
-    Converts integer into a list of bools representing the bits
+    Converts integer or a list of integers into a list of bools representing the bits
     ex. ord("A") = [False, True, False, False, False, False, False, True]
+    ex. [ord("A"), ord("B")] = [
+        False, True, False, False, False, False, False, True,
+        False, True, False, False, False, False, True, False,
+    ]
 
-    :param data: Integer to be converted
-    :param byte_length: Number of bytes to extract from integer
+    :param data: Integer(s) to be converted
+    :param byte_length: Number of bytes to extract from integer(s)
     :return: List of bools representing each bit in the data
     """
+    # Convert a single int into a list, so we can assume we're always working with a list here
+    data = [data] if isinstance(data, int) else data
 
     # The amount of bits we end up with will be the number of bytes we expect in the int times 8 (8 bits in a byte)
     # For example uint8_t would have 1 byte, but uint16_t would have 2 bytes
-    byte_size = byte_length * 8
-    # Convert the int in to a string of bits (add 2 to account for the `0b` prefix)
-    bit_str = format(data, f"#0{byte_size + 2}b")
-    # Cut off the `0b` prefix of the bit string, and reverse it
-    bit_str = bit_str.removeprefix("0b")[::-1]
+    byte_size = (byte_length * 8) // len(data)
+
+    bit_strs = []
+    for val in data:
+        # Convert the int(s) in to a string of bits (add 2 to account for the `0b` prefix)
+        tmp_str = format(val, f"#0{byte_size + 2}b")
+        # Cut off the `0b` prefix of the bit string, and reverse it
+        bit_strs.append(tmp_str.removeprefix("0b")[::-1])
     # Convert the bit_str to a list of ints
-    bit_list = map(int, bit_str)
+    bit_list = map(int, "".join(bit_strs[::-1]))
     # Convert the bit list to bools and return
     return list(map(bool, bit_list))
 
@@ -415,7 +424,13 @@ class BitsType(StructDataclass):
             else:
                 bin_data[v] = getattr(self, k)
 
-        self._raw = sum(v << i for i, v in enumerate(bin_data))
+        if isinstance(self._raw, list):
+            self._raw = [
+                sum(v << i for i, v in enumerate(chunk))
+                for chunk in list_chunks(bin_data, (self._byte_length // len(self._raw)) * 8)
+            ][::-1]
+        else:
+            self._raw = sum(v << i for i, v in enumerate(bin_data))
 
         # Run the super function to return the data in self._raw()
         return super()._encode()
@@ -428,8 +443,6 @@ def bits(_type: type, definition: dict[str, int | list[int]]) -> Callable[[type[
 
         new_cls = _cls
 
-        # TODO: Allow list of bytes for the type?
-        # TODO: Such as `Annotated[list[uint8_t], TypeMeta(size=5)]`
         new_cls.__annotations__["_raw"] = _type
 
         new_cls._meta = field(default_factory=dict)
