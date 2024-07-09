@@ -21,9 +21,7 @@ CHECK_DEPS = [
     "mypy",
     "pep8-naming",
 ]
-REQUIREMENTS = [
-    "loguru",
-]
+REQUIREMENTS = ["loguru", "typing_extensions"]
 
 EXTRAS = {
     "test": TEST_DEPS,

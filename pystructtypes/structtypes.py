@@ -9,6 +9,7 @@ from typing import (
     Annotated,
     Any,
     Callable,
+    Generic,
     Type,
     cast,
     get_args,
@@ -16,6 +17,8 @@ from typing import (
     get_type_hints,
     overload,
 )
+
+from typing_extensions import TypeVar
 
 
 def list_chunks(_list: list, n: int) -> Generator[list, None, None]:
@@ -50,13 +53,16 @@ def type_from_annotation(_type: type) -> type:
     return _type
 
 
-@dataclass
-class TypeMeta:
+T = TypeVar("T", int, float, default=int)
+
+
+@dataclass(frozen=True)
+class TypeMeta(Generic[T]):
     size: int = 1
-    default: Any | None = None
+    default: T | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class TypeInfo:
     format: str
     byte_size: int
@@ -73,19 +79,9 @@ int64_t = Annotated[int, TypeInfo("q", 8)]
 uint64_t = Annotated[int, TypeInfo("Q", 8)]
 
 # Named Types
-# char: TypeAlias = Annotated[int, "b"]  # 1 Byte
-# unsigned_char: TypeAlias = Annotated[int, "B"]  # 1 Byte
-# # bool: TypeAlias = Annotated[int, '?']  # 1 Byte
-# short: TypeAlias = Annotated[int, "h"]  # 2 Bytes
-# unsigned_short: TypeAlias = Annotated[int, "H"]  # 2 Bytes
-# # int: TypeAlias = Annotated[int, 'i']  # 4 Bytes
-# unsigned_int: TypeAlias = Annotated[int, "I"]  # 4 Bytes
-# long: TypeAlias = Annotated[int, "l"]  # 4 Bytes
-# unsigned_long: TypeAlias = Annotated[int, "L"]  # 4 Bytes
-# long_long: TypeAlias = Annotated[int, "q"]  # 8 Bytes
-# unsigned_long_long: TypeAlias = Annotated[int, "Q"]  # 8 Bytes
-# # float: TypeAlias = Annotated[float, 'f']  # 4 Bytes
-# double: TypeAlias = Annotated[float, "d"]  # 8 Bytes
+bool_t = Annotated[bool, TypeInfo("?", 1)]
+float_t = Annotated[float, TypeInfo("f", 4)]
+double_t = Annotated[float, TypeInfo("d", 8)]
 
 
 @dataclass
@@ -102,7 +98,6 @@ class TypeIterator:
         return getattr(self.type_meta, "size", 1)
 
 
-# TODO: Clean this up
 def iterate_types(cls) -> Generator[TypeIterator, None, None]:
     for key, hint in get_type_hints(cls, include_extras=True).items():
         # Grab the base type from a possibly annotated type hint
@@ -175,7 +170,6 @@ class StructDataclass:
                 # We have no TypeInfo object, and we're not a StructDataclass
                 # This means we're a regularly defined class variable, and we
                 # Don't have to do anything about this.
-                # TODO: Should we make a special type to strictly bypass this stuff?
                 pass
         self._simplify_format()
         self._byte_length = struct.calcsize("=" + self.struct_fmt)
@@ -221,35 +215,31 @@ class StructDataclass:
             return list(data)
         return data
 
-    def assign_decoded_values(self, data: list[int]) -> None:
+    def _decode(self, data: list[int]) -> None:
         idx = 0
 
         for state in self._state:
             attr = getattr(self, state.name)
 
             if isinstance(attr, list) and isinstance(attr[0], StructDataclass):
-                if not isinstance(attr, list):
-                    continue
-
                 list_idx = 0
-                sub_struct_byte_length = attr[0].size()  # TODO: Fix warning here
+                sub_struct_byte_length = attr[0].size()
                 while list_idx < state.size:
-                    attr[list_idx].assign_decoded_values(data[idx : idx + sub_struct_byte_length])
+                    instance: StructDataclass = attr[list_idx]
+                    instance._decode(data[idx : idx + sub_struct_byte_length])
                     list_idx += 1
                     idx += sub_struct_byte_length
             elif isinstance(attr, StructDataclass):
-                # TODO If state is != 1 then just break or something? I dunno
-                if state.size == 1:
-                    sub_struct_byte_length = attr.size()
-                    attr.assign_decoded_values(data[idx : idx + sub_struct_byte_length])
-                    idx += sub_struct_byte_length
-                    continue
-            else:
-                if state.size == 1:
-                    setattr(self, state.name, data[idx])
-                    idx += 1
-                    continue
+                if state.size != 1:
+                    raise Exception("This should be a size of one, dingus")
 
+                sub_struct_byte_length = attr.size()
+                attr._decode(data[idx : idx + sub_struct_byte_length])
+                idx += sub_struct_byte_length
+            elif state.size == 1:
+                setattr(self, state.name, data[idx])
+                idx += 1
+            else:
                 list_idx = 0
                 while list_idx < state.size:
                     getattr(self, state.name)[list_idx] = data[idx]
@@ -260,50 +250,31 @@ class StructDataclass:
         data = self._to_bytes(data)
 
         # Decode
-        self.assign_decoded_values(list(struct.unpack(self._endian(little_endian) + self.struct_fmt, data)))
+        self._decode(list(struct.unpack(self._endian(little_endian) + self.struct_fmt, data)))
 
-    def retrieve_values_to_encode(self) -> list[int]:
+    def _encode(self) -> list[int]:
         result: list[int] = []
 
         for state in self._state:
             attr = getattr(self, state.name)
 
             if isinstance(attr, list) and isinstance(attr[0], StructDataclass):
-                if not isinstance(attr, list):  # TODO: Get rid of this lol
-                    continue
-
+                item: StructDataclass
                 for item in attr:
-                    result.extend(item.retrieve_values_to_encode())
+                    result.extend(item._encode())
             elif isinstance(attr, StructDataclass):
-                if state.size == 1:  # TODO: Do we need this? lol
-                    result.extend(attr.retrieve_values_to_encode())
+                if state.size != 1:
+                    raise Exception("This should be a size of one, dingus")
+                result.extend(attr._encode())
+            elif state.size == 1:
+                result.append(getattr(self, state.name))
             else:
-                if state.size == 1:
-                    result.append(getattr(self, state.name))
-                else:
-                    result.extend(getattr(self, state.name))
+                result.extend(getattr(self, state.name))
         return result
 
     def encode(self, little_endian=False) -> bytes:
-        result = self.retrieve_values_to_encode()
+        result = self._encode()
         return struct.pack(self._endian(little_endian) + self.struct_fmt, *result)
-
-
-# XXX: This is how class decorators essentially work
-# @foo
-# class gotem(): ...
-#
-# is equal to: foo(gotem)
-#
-# @foo()
-# class gotem(): ...
-#
-# is equal to: foo()(gotem)
-#
-# @foo(bar=2)
-# class gotem(): ...
-#
-# is equal to: foo(bar=2)(gotem)
 
 
 @overload
@@ -335,7 +306,7 @@ def struct_dataclass(
 
                 # Set a default if it does not yet exist
                 if not getattr(new_cls, type_iterator.key, None):
-                    default = type_iterator.base_type
+                    default: type | int | float = type_iterator.base_type
                     if type_iterator.type_meta and type_iterator.type_meta.default:
                         default = type_iterator.type_meta.default
                         if isinstance(default, list):
@@ -347,11 +318,7 @@ def struct_dataclass(
                     else:
                         default = field(default_factory=lambda d=default: deepcopy(d))  # type: ignore
 
-                    setattr(
-                        new_cls,
-                        type_iterator.key,
-                        default,
-                    )
+                    setattr(new_cls, type_iterator.key, default)
             else:
                 # This assumes we want multiple items of base_type, so make sure the given base_type is
                 # properly set to be a list as well
@@ -370,7 +337,9 @@ def struct_dataclass(
                     # Create a new instance of the class
                     if inspect.isclass(default):
                         default_list = field(
-                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [d() for _ in range(s)]  # type: ignore
+                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
+                                d() for _ in range(s)
+                            ]
                         )
                     else:
                         default_list = field(
@@ -379,11 +348,7 @@ def struct_dataclass(
                             ]
                         )
 
-                setattr(
-                    new_cls,
-                    type_iterator.key,
-                    default_list,
-                )
+                setattr(new_cls, type_iterator.key, default_list)
         return cast(type[StructDataclass], dataclass(new_cls))
 
     if _cls is None:
@@ -424,9 +389,9 @@ class BitsType(StructDataclass):
 
         self._meta = {k: v for k, v in zip(*self._meta_tuple)}
 
-    def assign_decoded_values(self, data: list[int]) -> None:
+    def _decode(self, data: list[int]) -> None:
         # First call the super function to put the values in to _raw
-        super().assign_decoded_values(data)
+        super()._decode(data)
 
         # Combine all data in _raw as binary and convert to bools
         bin_data = int_to_bool_list(self._raw, self._byte_length)
@@ -440,7 +405,7 @@ class BitsType(StructDataclass):
             else:
                 setattr(self, k, bin_data[v])
 
-    def retrieve_values_to_encode(self) -> list[int]:
+    def _encode(self) -> list[int]:
         bin_data = list(itertools.repeat(False, self._byte_length * 8))
         for k, v in self._meta.items():
             if isinstance(v, list):
@@ -453,7 +418,7 @@ class BitsType(StructDataclass):
         self._raw = sum(v << i for i, v in enumerate(bin_data))
 
         # Run the super function to return the data in self._raw()
-        return super().retrieve_values_to_encode()
+        return super()._encode()
 
 
 def bits(_type: type, definition: dict[str, int | list[int]]) -> Callable[[type[BitsType]], type[StructDataclass]]:
@@ -481,7 +446,11 @@ def bits(_type: type, definition: dict[str, int | list[int]]) -> Callable[[type[
         # TODO: Can't decide if the line above this is a good idea or not
         for key, value in definition.items():
             if isinstance(value, list):
-                setattr(new_cls, key, field(default_factory=lambda v=len(value): [False for _ in range(v)]))  # type: ignore
+                setattr(
+                    new_cls,
+                    key,
+                    field(default_factory=lambda v=len(value): [False for _ in range(v)]),  # type: ignore
+                )
                 new_cls.__annotations__[key] = list[bool]
             else:
                 setattr(new_cls, key, False)

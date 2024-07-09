@@ -129,9 +129,9 @@ class EnabledSensors(StructDataclass):
     # We use this to store the data in the way we actually want
     _data: list[list[bool]] = field(default_factory=list)
 
-    def assign_decoded_values(self, data: list[int]) -> None:
+    def _decode(self, data: list[int]) -> None:
         # First call the super function to put the values in to _raw
-        super().assign_decoded_values(data)
+        super()._decode(data)
 
         # Erase everything in self._data to remove any old data
         self._data = []
@@ -145,7 +145,7 @@ class EnabledSensors(StructDataclass):
         # Remove the last item in self._data as there are only 9 panels
         del self._data[-1]
 
-    def retrieve_values_to_encode(self) -> list[int]:
+    def _encode(self) -> list[int]:
         # Modify self._raw with updates values from self._data
         for idx, items in enumerate(list_chunks(self._data, 2)):
             # Last chunk
@@ -153,7 +153,7 @@ class EnabledSensors(StructDataclass):
                 items.append([False, False, False, False])
             self._raw[idx] = sum(v << i for i, v in enumerate(list(itertools.chain.from_iterable(items))[::-1]))
         # Run the super function to return the data in self._raw()
-        return super().retrieve_values_to_encode()
+        return super()._encode()
 
     def __getitem__(self, index: int) -> list[bool]:
         # This let's us access the data with square brackets
