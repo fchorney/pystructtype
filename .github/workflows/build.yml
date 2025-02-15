@@ -1,0 +1,24 @@
+name: build
+on: [push]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv
+
+      - name: Set up Python
+        uses: actions/setup-python
+        with:
+          python-version: 3.13
+
+      - name: Run Tests
+        run: |
+          uv sync
+          tox -e py313
+
+# TODO: Add fix, check, types, coverage, docs, etc

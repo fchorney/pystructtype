@@ -1,0 +1,91 @@
+[project]
+name = "pystructtype"
+version = "0.1.0"
+description = "Leverage Python Types to Define C-Struct Interfaces"
+readme = "README.md"
+authors = [{name = "fchorney", email = "github@djsbx.com"}]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Utilities",
+    "Programming Language :: Python :: 3.13",
+
+]
+keywords = ["struct", "cstruct", "type"]
+requires-python = ">=3.13"
+dependencies = [
+    "loguru>=0.7.3",
+]
+
+[project.urls]
+Homepage = "https://github.com/fchorney/pystructtype"
+Documentation = ""
+Repository = "https://github.com/fchorney/pystructtype"
+Issues = "https://github.com/fchorney/pystructtype/issues"
+
+
+[dependency-groups]
+dev = [
+    "coverage[toml]",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "recommonmark",
+    "ruff",
+    "sphinx",
+    "sphinx-autoapi",
+    "sphinx-rtd-theme",
+    "sphinxcontrib-runcmd",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.coverage.run]
+relative_files = true
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = true
+exclude_lines = ["if __name__ == .__main__.:", "def __str__", "def __repr__", "pragma: no cover"]
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 120
+indent-width = 4
+
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "F",   # PyFlakes
+    "E",   # Error
+    "I",   # iSort
+    "N",   # Pep8-Naming
+    "B",   # Flake8-BugBear
+    "UP",  # PyUpgrade
+    "RUF", # Ruff Specific Rules
+]
+ignore = []
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+# Like Black
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.isort]

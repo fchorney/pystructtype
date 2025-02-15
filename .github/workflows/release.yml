@@ -1,0 +1,26 @@
+name: Release
+on:
+  workflow_dispatch:
+    push:
+      branches: ['main']
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv
+
+      - name: Set up Python
+        uses: actions/setup-python
+        with:
+          python-version: 3.13
+
+      - name: Release
+        run: |
+          uv build
+          uv publish --publish-url https://test.pypi.org/legacy/ --trusted-publishing always
