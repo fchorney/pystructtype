@@ -19,6 +19,7 @@ jobs:
       - name: Run Tests
         run: |
           uv sync
+          uv tool install tox
           tox -e py313
   check:
     runs-on: ubuntu-latest
@@ -37,6 +38,7 @@ jobs:
       - name: Check Formatting
         run: |
           uv sync
+          uv tool install tox
           tox -e check
 
   type:
@@ -56,6 +58,7 @@ jobs:
       - name: Check Formatting
         run: |
           uv sync
+          uv tool install tox
           tox -e type
 
 # TODO: Add coverage, docs
