@@ -23,7 +23,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/fchorney/pystructtype"
-Documentation = ""
+Documentation = "https://pystructtype.readthedocs.io/en/latest/"
 Repository = "https://github.com/fchorney/pystructtype"
 Issues = "https://github.com/fchorney/pystructtype/issues"
 
