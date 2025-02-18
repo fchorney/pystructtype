@@ -1,7 +1,6 @@
 PyStructType
 ============
-
-Add Stuff Here
+Version: |version|
 
 .. toctree::
    :maxdepth: 1
@@ -9,3 +8,10 @@ Add Stuff Here
    :name: sec-code-ref
 
    autoapi/pystructtype/index
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`

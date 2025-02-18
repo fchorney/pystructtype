@@ -8,7 +8,6 @@ from dataclasses import dataclass, field, is_dataclass
 from typing import (
     Annotated,
     Any,
-    Type,
     TypeVar,
     cast,
     get_args,
@@ -356,11 +355,11 @@ def struct_dataclass(
 def int_to_bool_list(data: int | list[int], byte_length: int) -> list[bool]:
     """
     Converts integer or a list of integers into a list of bools representing the bits
+
     ex. ord("A") = [False, True, False, False, False, False, False, True]
-    ex. [ord("A"), ord("B")] = [
-        False, True, False, False, False, False, False, True,
-        False, True, False, False, False, False, True, False,
-    ]
+
+    ex. [ord("A"), ord("B")] = [False, True, False, False, False, False, False, True,
+    False, True, False, False, False, False, True, False]
 
     :param data: Integer(s) to be converted
     :param byte_length: Number of bytes to extract from integer(s)
@@ -459,7 +458,7 @@ def bits(_type: Any, definition: dict[str, int | list[int]]) -> Callable[[type[B
                 setattr(
                     new_cls,
                     key,
-                    field(default_factory=lambda v=len(value): [False for _ in range(v)]),  # type: ignore
+                    field(default_factory=lambda v=len(value): [False for _ in range(v)]),  # type: ignore # noqa: B008
                 )
                 new_cls.__annotations__[key] = list[bool]
             else:

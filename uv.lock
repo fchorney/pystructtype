@@ -70,15 +70,6 @@ wheels = [
 ]
 
 [[package]]
-name = "commonmark"
-version = "0.9.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/60/48/a60f593447e8f0894ebb7f6e6c1f25dafc5e89c5879fdc9360ae93ff83f0/commonmark-0.9.1.tar.gz", hash = "sha256:452f9dc859be7f06631ddcb328b6919c67984aca654e5fefb3914d54691aed60", size = 95764 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b1/92/dfd892312d822f36c55366118b95d914e5f16de11044a27cf10a7d71bbbf/commonmark-0.9.1-py2.py3-none-any.whl", hash = "sha256:da2f38c92590f83de410ba1a3cbceafbc74fee9def35f9251ba9a971d6d66fd9", size = 51068 },
-]
-
-[[package]]
 name = "coverage"
 version = "7.6.12"
 source = { registry = "https://pypi.org/simple" }
@@ -265,12 +256,10 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "recommonmark" },
     { name = "ruff" },
     { name = "sphinx" },
     { name = "sphinx-autoapi" },
     { name = "sphinx-rtd-theme" },
-    { name = "sphinxcontrib-runcmd" },
 ]
 
 [package.metadata]
@@ -282,12 +271,10 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "recommonmark" },
     { name = "ruff" },
     { name = "sphinx" },
     { name = "sphinx-autoapi" },
     { name = "sphinx-rtd-theme" },
-    { name = "sphinxcontrib-runcmd" },
 ]
 
 [[package]]
@@ -333,20 +320,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/fe/0f/25911a9f080464c59fab9027482f822b86bf0608957a5fcc6eaac85aa515/PyYAML-6.0.2-cp313-cp313-musllinux_1_1_x86_64.whl", hash = "sha256:68ccc6023a3400877818152ad9a1033e3db8625d899c72eacb5a668902e4d652", size = 751597 },
     { url = "https://files.pythonhosted.org/packages/14/0d/e2c3b43bbce3cf6bd97c840b46088a3031085179e596d4929729d8d68270/PyYAML-6.0.2-cp313-cp313-win32.whl", hash = "sha256:bc2fa7c6b47d6bc618dd7fb02ef6fdedb1090ec036abab80d4681424b84c1183", size = 140527 },
     { url = "https://files.pythonhosted.org/packages/fa/de/02b54f42487e3d3c6efb3f89428677074ca7bf43aae402517bc7cca949f3/PyYAML-6.0.2-cp313-cp313-win_amd64.whl", hash = "sha256:8388ee1976c416731879ac16da0aff3f63b286ffdd57cdeb95f3f2e085687563", size = 156446 },
-]
-
-[[package]]
-name = "recommonmark"
-version = "0.7.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "commonmark" },
-    { name = "docutils" },
-    { name = "sphinx" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/1c/00/3dd2bdc4184b0ce754b5b446325abf45c2e0a347e022292ddc44670f628c/recommonmark-0.7.1.tar.gz", hash = "sha256:bdb4db649f2222dcd8d2d844f0006b958d627f732415d399791ee436a3686d67", size = 34444 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c6/77/ed589c75db5d02a77a1d5d2d9abc63f29676467d396c64277f98b50b79c2/recommonmark-0.7.1-py2.py3-none-any.whl", hash = "sha256:1b1db69af0231efce3fa21b94ff627ea33dee7079a01dd0a7f8482c3da148b3f", size = 10214 },
 ]
 
 [[package]]
@@ -509,18 +482,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/68/bc/9104308fc285eb3e0b31b67688235db556cd5b0ef31d96f30e45f2e51cae/sphinxcontrib_qthelp-2.0.0.tar.gz", hash = "sha256:4fe7d0ac8fc171045be623aba3e2a8f613f8682731f9153bb2e40ece16b9bbab", size = 17165 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/27/83/859ecdd180cacc13b1f7e857abf8582a64552ea7a061057a6c716e790fce/sphinxcontrib_qthelp-2.0.0-py3-none-any.whl", hash = "sha256:b18a828cdba941ccd6ee8445dbe72ffa3ef8cbe7505d8cd1fa0d42d3f2d5f3eb", size = 88743 },
-]
-
-[[package]]
-name = "sphinxcontrib-runcmd"
-version = "0.2.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "sphinx" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a2/03/6eb30814c9839f36131284a46ec9fc39d7bd356078648bc7125d5d1c05e8/sphinxcontrib-runcmd-0.2.0.tar.gz", hash = "sha256:3551c389d9c5fe82d693c7222feb9658b1a1a5a1abcb0063e8385e5528c64c76", size = 5376 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/d9/67a79080b5d9fcb367470af9e525a9c53122e95744665de09462dcd676d8/sphinxcontrib_runcmd-0.2.0-py2.py3-none-any.whl", hash = "sha256:7b739b68e27210b4c7c12ba16e5b3da7b313c49991401f896d29bea0f0771934", size = 6043 },
 ]
 
 [[package]]

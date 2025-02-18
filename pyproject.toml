@@ -1,6 +1,6 @@
 [project]
 name = "pystructtype"
-version = "0.1.0"
+version = "0.0.1"
 description = "Leverage Python Types to Define C-Struct Interfaces"
 readme = "README.md"
 authors = [{name = "fchorney", email = "github@djsbx.com"}]
@@ -14,7 +14,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Topic :: Utilities",
     "Programming Language :: Python :: 3.13",
-
 ]
 keywords = ["struct", "cstruct", "type"]
 requires-python = ">=3.13"
@@ -35,12 +34,10 @@ dev = [
     "mypy",
     "pytest",
     "pytest-cov",
-    "recommonmark",
     "ruff",
     "sphinx",
     "sphinx-autoapi",
     "sphinx-rtd-theme",
-    "sphinxcontrib-runcmd",
 ]
 
 [build-system]
