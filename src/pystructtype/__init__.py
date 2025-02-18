@@ -8,7 +8,6 @@ from dataclasses import dataclass, field, is_dataclass
 from typing import (
     Annotated,
     Any,
-    Type,
     TypeVar,
     cast,
     get_args,
@@ -65,7 +64,10 @@ class TypeInfo:
     byte_size: int
 
 
+# TODO: Support proper "c-string" types
+
 # Fixed Size Types
+char_t = Annotated[int, TypeInfo("c", 1)]
 int8_t = Annotated[int, TypeInfo("b", 1)]
 uint8_t = Annotated[int, TypeInfo("B", 1)]
 int16_t = Annotated[int, TypeInfo("h", 2)]
@@ -75,8 +77,9 @@ uint32_t = Annotated[int, TypeInfo("I", 4)]
 int64_t = Annotated[int, TypeInfo("q", 8)]
 uint64_t = Annotated[int, TypeInfo("Q", 8)]
 
+# TODO: Make a special Bool class to auto-convert from int to bool
+
 # Named Types
-bool_t = Annotated[bool, TypeInfo("?", 1)]
 float_t = Annotated[float, TypeInfo("f", 4)]
 double_t = Annotated[float, TypeInfo("d", 8)]
 
@@ -170,7 +173,7 @@ class StructDataclass:
                 pass
         self._simplify_format()
         self._byte_length = struct.calcsize("=" + self.struct_fmt)
-        print(f"{self.__class__.__name__}: {self._byte_length} : {self.struct_fmt}")
+        # print(f"{self.__class__.__name__}: {self._byte_length} : {self.struct_fmt}")
 
     def _simplify_format(self) -> None:
         # First expand the format
@@ -329,6 +332,8 @@ def struct_dataclass(
 
                 default_list = []
                 if isinstance(default, list):
+                    # TODO: Implement having the entire list be a default rather than needing to set each
+                    # TODO: element as the same base object.
                     pass
                 else:
                     # Create a new instance of the class
@@ -356,11 +361,11 @@ def struct_dataclass(
 def int_to_bool_list(data: int | list[int], byte_length: int) -> list[bool]:
     """
     Converts integer or a list of integers into a list of bools representing the bits
+
     ex. ord("A") = [False, True, False, False, False, False, False, True]
-    ex. [ord("A"), ord("B")] = [
-        False, True, False, False, False, False, False, True,
-        False, True, False, False, False, False, True, False,
-    ]
+
+    ex. [ord("A"), ord("B")] = [False, True, False, False, False, False, False, True,
+    False, True, False, False, False, False, True, False]
 
     :param data: Integer(s) to be converted
     :param byte_length: Number of bytes to extract from integer(s)
@@ -459,7 +464,7 @@ def bits(_type: Any, definition: dict[str, int | list[int]]) -> Callable[[type[B
                 setattr(
                     new_cls,
                     key,
-                    field(default_factory=lambda v=len(value): [False for _ in range(v)]),  # type: ignore
+                    field(default_factory=lambda v=len(value): [False for _ in range(v)]),  # type: ignore # noqa: B008
                 )
                 new_cls.__annotations__[key] = list[bool]
             else:

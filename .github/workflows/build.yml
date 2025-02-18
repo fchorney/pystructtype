@@ -2,23 +2,63 @@ name: build
 on: [push]
 
 jobs:
-  check:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repo
-        uses: actions/checkout
+        uses: actions/checkout@v4
 
       - name: Set up uv
-        uses: astral-sh/setup-uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Set up Python
-        uses: actions/setup-python
+        uses: actions/setup-python@v5
         with:
           python-version: 3.13
 
       - name: Run Tests
         run: |
           uv sync
+          uv tool install tox
           tox -e py313
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
 
-# TODO: Add fix, check, types, coverage, docs, etc
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+
+      - name: Check Formatting
+        run: |
+          uv sync
+          uv tool install tox
+          tox -e check
+
+  type:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+
+      - name: Check Formatting
+        run: |
+          uv sync
+          uv tool install tox
+          tox -e type
+
+# TODO: Add coverage, docs
