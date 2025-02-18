@@ -38,6 +38,8 @@ dev = [
     "sphinx",
     "sphinx-autoapi",
     "sphinx-rtd-theme",
+    "tox",
+    "tox-uv",
 ]
 
 [build-system]
