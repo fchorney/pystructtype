@@ -3,16 +3,8 @@ from dataclasses import field
 from enum import IntEnum
 from typing import Annotated
 
-from pystructtype import (
-    BitsType,
-    StructDataclass,
-    TypeMeta,
-    bits,
-    list_chunks,
-    struct_dataclass,
-    uint8_t,
-    uint16_t,
-)
+from pystructtype import BitsType, StructDataclass, TypeMeta, bits, struct_dataclass, uint8_t, uint16_t
+from pystructtype.utils import list_chunks
 
 TEST_CONFIG_DATA = [
     # masterVersion

@@ -1,13 +1,6 @@
 from typing import Annotated
 
-from pystructtype import (
-    BitsType,
-    StructDataclass,
-    TypeMeta,
-    bits,
-    struct_dataclass,
-    uint8_t,
-)
+from pystructtype import BitsType, StructDataclass, TypeMeta, bits, struct_dataclass, uint8_t
 
 from .examples import TEST_CONFIG_DATA, SMXConfigType  # type: ignore
 
