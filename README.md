@@ -44,6 +44,11 @@ s.decode([4, 2, 65])
 # MyStruct(myNum=1026, myLetter=b"A")
 s.decode([4, 2, 65], little_endian=True)
 # MyStruct(myNum=516, myLetter=b"A")
+
+# We can modify the class values and encode the data to send back
+s.myNum = 2562
+s.encode()
+# [10, 2, 65]
 ```
 
 For arrays of basic elements, you need to Annotate them with
@@ -75,9 +80,10 @@ List defaults will set all items in the list to the same value. Currently
 setting a complete default list for all values is not implemented.
 
 ```c
-struct MyStruct P
+struct MyStruct {
     uint8_t myInt = 5;
     uint8_t myInts[2];
+};
 ```
 
 ```python
