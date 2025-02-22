@@ -1,8 +1,34 @@
 from typing import Annotated
 
-from pystructtype import BitsType, StructDataclass, TypeMeta, bits, struct_dataclass, uint8_t
+from pystructtype import BitsType, StructDataclass, TypeMeta, bits, string_t, struct_dataclass, uint8_t
 
 from .examples import TEST_CONFIG_DATA, SMXConfigType  # type: ignore
+
+
+def test_strings():
+    @struct_dataclass
+    class TestString(StructDataclass):
+        boo: uint8_t
+        foo: Annotated[string_t, TypeMeta[str](chunk_size=3)]
+        far: Annotated[list[uint8_t], TypeMeta(size=2)]
+        bar: Annotated[string_t, TypeMeta[str](chunk_size=5)]
+        rob: uint8_t
+        rar: Annotated[list[string_t], TypeMeta[str](size=2, chunk_size=2)]
+
+    data = [0, 65, 66, 67, 1, 2, 65, 66, 67, 68, 69, 2, 65, 66, 67, 68]
+
+    s = TestString()
+    s.decode(data)
+
+    assert s.foo == b"ABC"
+    assert s.bar == b"ABCDE"
+    assert s.boo == 0
+    assert s.far == [1, 2]
+    assert s.rob == 2
+    assert s.rar == [b"AB", b"CD"]
+
+    e = s.encode()
+    assert s._to_list(e) == data
 
 
 def test_smx_config():

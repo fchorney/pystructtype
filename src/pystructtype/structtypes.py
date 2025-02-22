@@ -5,7 +5,7 @@ from typing import Annotated, Any, TypeVar, get_args, get_origin, get_type_hints
 
 from pystructtype import structdataclass
 
-T = TypeVar("T", int, float, default=int)
+T = TypeVar("T", int, float, str, default=int)
 """Generic Data Type for StructDataclass Contents"""
 
 
@@ -17,6 +17,7 @@ class TypeMeta[T]:
     """
 
     size: int = 1
+    chunk_size: int = 1
     default: T | None = None
 
 
@@ -30,8 +31,6 @@ class TypeInfo:
     format: str
     byte_size: int
 
-
-# TODO: Support proper "c-string" types
 
 # Fixed Size Types
 char_t = Annotated[int, TypeInfo("c", 1)]
@@ -60,6 +59,8 @@ float_t = Annotated[float, TypeInfo("f", 4)]
 """4 Byte float Type"""
 double_t = Annotated[float, TypeInfo("d", 8)]
 """8 Byte double Type"""
+string_t = Annotated[str, TypeInfo("s", 1)]
+"""1 Byte char[] Type"""
 
 
 @dataclass
@@ -88,6 +89,20 @@ class TypeIterator:
         :return: integer containing the size of the type
         """
         return getattr(self.type_meta, "size", 1)
+
+    @property
+    def chunk_size(self) -> int:
+        """
+        Return the chunk size of the type. Typically, this is used for char[]/string
+        types as these are defined in chunks rather than in a size of individual
+        values.
+
+        This defaults to 1, else this will return the size defined in the `type_meta` object
+        if it exists.
+
+        :return: integer containing the chunk size of the type
+        """
+        return getattr(self.type_meta, "chunk_size", 1)
 
 
 def iterate_types(cls: type) -> Generator[TypeIterator]:
