@@ -1,6 +1,6 @@
 [project]
 name = "pystructtype"
-version = "0.2.0"
+version = "0.3.0"
 description = "Leverage Python Types to Define C-Struct Interfaces"
 readme = "README.md"
 authors = [{name = "fchorney", email = "github@djsbx.com"}]
