@@ -19,6 +19,7 @@ class StructState:
     name: str
     struct_fmt: str
     size: int
+    chunk_size: int
 
 
 class StructDataclass:
@@ -39,18 +40,18 @@ class StructDataclass:
                         type_iterator.key,
                         type_iterator.type_info.format,
                         type_iterator.size,
+                        type_iterator.chunk_size,
                     )
                 )
-                self.struct_fmt += (
-                    f"{type_iterator.size if type_iterator.size > 1 else ''}{type_iterator.type_info.format}"
-                )
+                _fmt_prefix = type_iterator.chunk_size if type_iterator.chunk_size > 1 else ""
+                self.struct_fmt += f"{_fmt_prefix}{type_iterator.type_info.format}" * type_iterator.size
             elif inspect.isclass(type_iterator.base_type) and issubclass(type_iterator.base_type, StructDataclass):
                 attr = getattr(self, type_iterator.key)
                 if type_iterator.is_list:
                     fmt = attr[0].struct_fmt
                 else:
                     fmt = attr.struct_fmt
-                self._state.append(StructState(type_iterator.key, fmt, type_iterator.size))
+                self._state.append(StructState(type_iterator.key, fmt, type_iterator.size, type_iterator.chunk_size))
                 self.struct_fmt += fmt * type_iterator.size
             else:
                 # We have no TypeInfo object, and we're not a StructDataclass
@@ -76,14 +77,26 @@ class StructDataclass:
         while idx < items_len:
             if "0" <= (item := items[idx]) <= "9":
                 idx += 1
-                expanded_format += items[idx] * int(item)
+
+                if items[idx] == "s":
+                    # Shouldn't expand actual char[]/string types as they need to be grouped
+                    # so we know how big the strings should be
+                    expanded_format += item + items[idx]
+                else:
+                    expanded_format += items[idx] * int(item)
             else:
                 expanded_format += item
             idx += 1
 
         # Simplify the format by turning multiple consecutive letters into a number + letter combo
         simplified_format = ""
-        for group in (x[0] for x in re.findall(r"(([a-zA-Z])\2*)", expanded_format)):
+        for group in (x[0] for x in re.findall(r"(\d*([a-zA-Z])\2*)", expanded_format)):
+            if re.match(r"\d+", group[0]):
+                # Just pass through any format that we've explicitly kept
+                # a number in front of
+                simplified_format += group
+                continue
+
             simplified_format += f"{group_len if (group_len := len(group)) > 1 else ''}{group[0]}"
 
         self.struct_fmt = simplified_format

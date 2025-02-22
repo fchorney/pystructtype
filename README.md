@@ -98,6 +98,40 @@ s.decode([10, 5, 6])
 # MyStruct(myInt=10, myInts=[5, 6])
 ```
 
+# String / char[] Type
+
+Defining c-string types is a little different. Instead of using
+`size` in the `TypeMeta`, we need to instead use `chunk_size`.
+
+This is because the way the struct format is defined for c-strings needs
+to know how big the string data is expected to be so that it can put the
+whole string in a single variable. 
+
+The `chunk_size` is also introduced to allow for `char[][]` for converting
+a list of strings.
+
+```c
+struct MyStruct {
+    char myStr[3];
+    char myStrList[2][3];
+};
+```
+```python
+@struct_dataclass
+class MyStruct(StructDataclass):
+    myStr: Annotated[string_t, TypeMeta[str](chunk_size=3)]
+    myStrList: Annotated[list[string_t], TypeMeta[str](size=2, chunk_size=3)]
+
+
+s = MyStruct()
+s.decode([65, 66, 67, 68, 69, 70, 71, 72, 73])
+# MyStruct(myStr=b"ABC", myStrList=[b"DEF", b"GHI"])
+```
+
+If you instead try to define this as a list of `char_t` types,
+you would only be able to end up with 
+`MyStruct(myStr=[b"A", b"B", b"C"], myStrList=[b"D", b"E", b"F", b"G", b"H", b"I"])`
+
 # The Bits Abstraction
 
 This library includes a `bits` abstraction to map bits to variables for easier access.
@@ -205,7 +239,6 @@ s.decode([15, 15, 15, 15, 0])
 #   [False, False, False, False],
 #   [True, True, True, True],
 #   [False, False, False, False],
-#   [False, False, False, False]
 # ]
 
 # With the get/set functioned defined, we can access the data
@@ -249,7 +282,6 @@ l.decode([1, 2, 3, 4, 5, 6, 7, 8, 9])
 # Future Updates
 
 - Bitfield: Similar to the `Bits` abstraction. An easy way to define bitfields
-- C-Strings: Make a base class to handle C strings (arrays of chars)
 - Potentially more ways to define bits (dicts/lists/etc).
 - Potentially allowing list defaults to be entire pre-defined lists.
 - ???
