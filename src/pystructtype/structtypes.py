@@ -5,6 +5,31 @@ from typing import Annotated, Any, TypeVar, get_args, get_origin, get_type_hints
 
 from pystructtype import structdataclass
 
+# X = TypeVar("X", int, float, default=int)
+#
+# @dataclass(frozen=True)
+# class Foo[X]:
+#     foo: int = 1
+#     bar: X | None = None
+#
+# a = Foo(bar=2)
+# b = Foo[int](foo=2, bar=3)
+# c = Foo[float](foo=3, bar=1.2)
+# z: Annotated[int, Foo(foo=2)]
+# x: Annotated[int, Foo[int](foo=2, bar=3)]
+#
+# class Bar[X]:
+#     def __init__(self, foo: int = 1, bar: X | None = None):
+#         self.foo = foo
+#         self.bar = bar
+#
+# d = Bar(bar=2)
+# e = Bar[int](foo=2, bar=3)
+# f = Bar[float](foo=3, bar=1.2)
+#
+# y: Annotated[int, Bar(foo=2)]
+# u: Annotated[int, Bar[int](foo=2, bar=3)]
+
 T = TypeVar("T", int, float, bytes, default=int)
 """Generic Data Type for TypeMeta Contents"""
 

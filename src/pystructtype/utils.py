@@ -13,11 +13,12 @@ def list_chunks(_list: list, n: int) -> Generator[list]:
 
 def int_to_bool_list(data: int | list[int], byte_length: int) -> list[bool]:
     """
-    Converts an integer or a list of integers into a list of bools representing the bits
+    Converts an integer or a list of integers into a list of bools representing the bits.
+    The result is in reverse order so that the Least Significant Bit is in list position 0.
 
-    ex. ord("A") or 0b01000001 = [False, True, False, False, False, False, False, True]
+    ex. ord("A") or 0b01000001 = [True, False, False, False, False, False, True, False]
 
-    ex. [ord("A"), ord("B")] = [False, True, False, False, False, False, False, True,
+    ex. [ord("A"), ord("B")] or [0b01000001, 0b01000010]= [False, True, False, False, False, False, False, True,
     False, True, False, False, False, False, True, False]
 
     :param data: Integer(s) to be converted
