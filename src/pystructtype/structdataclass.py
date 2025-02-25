@@ -4,7 +4,7 @@ import struct
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field, is_dataclass
-from typing import TypeVar, cast, overload
+from typing import TypeVar, overload
 
 from pystructtype.structtypes import iterate_types
 
@@ -168,9 +168,6 @@ class StructDataclass:
             elif isinstance(attr, StructDataclass):
                 # If the current attribute is not a list, and is a subclass of StructDataclass
                 # Call _decode on the required subset of bytes for the item
-                if state.size != 1:
-                    raise Exception(f"Attribute {state.name} is not defined as a list but has a size > 0")
-
                 sub_struct_byte_length = attr.size()
                 attr._decode(data[idx : idx + sub_struct_byte_length])
                 idx += sub_struct_byte_length
@@ -186,7 +183,7 @@ class StructDataclass:
                     list_idx += 1
                     idx += 1
 
-    def decode(self, data: list[int] | bytes, little_endian=False) -> None:
+    def decode(self, data: list[int] | bytes, little_endian: bool = False) -> None:
         """
         Decode the given data into this subclass of StructDataclass
 
@@ -220,8 +217,6 @@ class StructDataclass:
             elif isinstance(attr, StructDataclass):
                 # Attribute is a StructDataclass subclass
                 # Call _encode on it
-                if state.size != 1:
-                    raise Exception(f"Attribute {state.name} is defined as a list but has a size == 1")
                 result.extend(attr._encode())
             elif state.size == 1:
                 # Attribute is a single base type
@@ -233,7 +228,7 @@ class StructDataclass:
                 result.extend(getattr(self, state.name))
         return result
 
-    def encode(self, little_endian=False) -> bytes:
+    def encode(self, little_endian: bool = False) -> bytes:
         """
         Encode the data from this subclass of StructDataclass into bytes
 
@@ -249,7 +244,7 @@ D = TypeVar("D", bound=StructDataclass)
 
 
 @overload
-def struct_dataclass(_cls: type[D]) -> type[D]:
+def struct_dataclass[D](_cls: type[D]) -> type[D]:
     """
     Overload for using a bare decorator
 
@@ -261,11 +256,11 @@ def struct_dataclass(_cls: type[D]) -> type[D]:
     :param _cls: Subtype of StructDataclass
     :return: Modified Subtype of StructDataclass
     """
-    pass
+    pass  # pragma: no cover
 
 
 @overload
-def struct_dataclass(_cls: None) -> Callable[[type[D]], type[D]]:
+def struct_dataclass[D](_cls: None) -> Callable[[type[D]], type[D]]:
     """
     Overload for using called decorator
 
@@ -277,10 +272,10 @@ def struct_dataclass(_cls: None) -> Callable[[type[D]], type[D]]:
     :param _cls: None
     :return: Callable that takes in a Subtype of StructDataclass and returns a modified Subtype
     """
-    pass
+    pass  # pragma: no cover
 
 
-def struct_dataclass(
+def struct_dataclass[D](
     _cls: type[D] | None = None,
 ) -> Callable[[type[D]], type[D]] | type[D]:
     """
@@ -304,7 +299,7 @@ def struct_dataclass(
         # but it will be a subtype of Dataclass by the end of this function
         if is_dataclass(new_cls):
             # Just try to cast it again, and return
-            return cast(type[StructDataclass], new_cls)
+            return new_cls
 
         # Make sure any fields without a default have one
         # This prevents Dataclass from being mad that we might have attributes defined with
@@ -312,48 +307,59 @@ def struct_dataclass(
         for type_iterator in iterate_types(new_cls):
             # If the current type is just a base type, then we can essentially ignore it
             # These are typically used for extra processing and not included in the decode/encode
-            if not type_iterator.is_pystructtype:
+            if not type_iterator.is_pystructtype and not inspect.isclass(type_iterator.base_type):
                 continue
 
             if not type_iterator.type_meta or type_iterator.type_meta.size == 1:
                 # This type either has no metadata, or is defined as having a size of 1 and is
                 # therefore not a list
                 if type_iterator.is_list:
-                    raise Exception(f"Attribute {type_iterator.key} is defined as a list type but has size set to 1")
+                    raise ValueError(f"Attribute {type_iterator.key} is defined as a list type but has size set to 1")
 
                 # Set a default if it does not yet exist
                 if not getattr(new_cls, type_iterator.key, None):
                     default: type | int | float | bytes = type_iterator.base_type
-                    if type_iterator.type_meta and type_iterator.type_meta.default:
-                        default = type_iterator.type_meta.default
-                        if isinstance(default, list):
-                            raise Exception(f"default value for {type_iterator.key} attribute can not be a list")
-
+                    if type_iterator.type_meta:
+                        if type_iterator.type_meta.default is not None:
+                            default = type_iterator.type_meta.default
+                            if isinstance(default, list):
+                                raise TypeError(f"default value for {type_iterator.key} attribute can not be a list")
+                            if inspect.isclass(default):
+                                default = field(default_factory=default)
+                                setattr(new_cls, type_iterator.key, default)
+                                continue
                     # Create a new instance of the class, or value
                     if inspect.isclass(default):
-                        default = field(default_factory=lambda d=default: d())  # type: ignore
+                        default = field(default_factory=default)
                     else:
                         default = field(default_factory=lambda d=default: deepcopy(d))  # type: ignore
-
                     setattr(new_cls, type_iterator.key, default)
             else:
                 # This assumes we want multiple items of base_type, so make sure the given base_type is
                 # properly set to be a list as well
                 if not type_iterator.is_list:
-                    raise Exception(f"Attribute {type_iterator.key} is not a list type but has a size > 1")
+                    raise ValueError(f"Attribute {type_iterator.key} is not a list type but has a size > 1")
 
-                # We have a meta type and the size is > 1 so make the default a field
-                default = type_iterator.base_type
                 if type_iterator.type_meta and type_iterator.type_meta.default:
                     default = type_iterator.type_meta.default
-
-                default_list = []
-                if isinstance(default, list):
-                    # TODO: Implement having the entire list be a default rather than needing to set each
-                    # TODO: element as the same base object.
-                    pass
+                    if isinstance(default, list):
+                        # Avoid mutable default in lambda by using tuple and converting back to list
+                        default_tuple = tuple(deepcopy(default))
+                        default_list = field(default_factory=lambda d=default_tuple: list(d))
+                    elif inspect.isclass(default):
+                        default_list = field(
+                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
+                                d() for _ in range(s)
+                            ]
+                        )
+                    else:
+                        default_list = field(
+                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
+                                deepcopy(d) for _ in range(s)
+                            ]
+                        )
                 else:
-                    # Create a new instance of the class or value
+                    default = type_iterator.base_type
                     if inspect.isclass(default):
                         default_list = field(
                             default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
@@ -368,7 +374,7 @@ def struct_dataclass(
                         )
 
                 setattr(new_cls, type_iterator.key, default_list)
-        return cast(type[D], dataclass(new_cls))
+        return dataclass(new_cls)
 
     # If we use the decorator with empty parens, we simply return the inner callable
     if _cls is None:

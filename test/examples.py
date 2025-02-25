@@ -300,22 +300,25 @@ class Sensor(IntEnum):
 
 
 @bits(uint8_t, {"autolights": 0, "fsr": 1})
-class FlagsType(BitsType): ...
+class FlagsType(BitsType):
+    autolights: bool
+    fsr: bool
 
 
 @bits(uint16_t, {"steps": [0, 1, 2, 3, 4, 5, 6, 7, 8]})
 class PanelMaskType(BitsType):
+    steps: list[bool]
+
     def __getitem__(self, index: int) -> bool:
         # This lets us access the data with square brackets
         # ex. `config.PanelMaskType[Panel.UP]`
-        return getattr(self, "steps", [])[index]
+        return self.steps[index] or False
 
     def __setitem__(self, index: int, value: bool) -> None:
         # This lets us set the data with square brackets
         # ex. `config.PanelMaskType[Panel.DOWN] = True`
-        steps = getattr(self, "steps", [])
-        assert index <= len(steps)
-        steps[index] = value
+        assert index <= len(self.steps)
+        self.steps[index] = value
 
 
 @struct_dataclass

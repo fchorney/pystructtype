@@ -22,7 +22,7 @@ from pystructtype import (
 from pystructtype.structtypes import TypeInfo, TypeIterator, iterate_types, type_from_annotation
 
 
-def test_char_t():
+def test_char_t() -> None:
     @struct_dataclass
     class MyStruct(StructDataclass):
         foo: char_t
@@ -37,7 +37,7 @@ def test_char_t():
     assert s._to_list(e) == data
 
 
-def test_string_t():
+def test_string_t() -> None:
     @struct_dataclass
     class MyStruct(StructDataclass):
         foo: string_t
@@ -54,7 +54,7 @@ def test_string_t():
     assert s._to_list(e) == data
 
 
-def test_unsigned_int():
+def test_unsigned_int() -> None:
     @struct_dataclass
     class MyStruct(StructDataclass):
         foo8: uint8_t
@@ -75,7 +75,7 @@ def test_unsigned_int():
     assert s._to_list(e) == data
 
 
-def test_signed_int():
+def test_signed_int() -> None:
     @struct_dataclass
     class MyStruct(StructDataclass):
         foo8: int8_t
@@ -96,7 +96,7 @@ def test_signed_int():
     assert s._to_list(e) == data
 
 
-def test_floating_points():
+def test_floating_points() -> None:
     @struct_dataclass
     class MyStruct(StructDataclass):
         foo: float_t
@@ -113,7 +113,7 @@ def test_floating_points():
     assert s._to_list(e) == data
 
 
-def test_basic_type_lists():
+def test_basic_type_lists() -> None:
     @struct_dataclass
     class MyStruct(StructDataclass):
         int_type: Annotated[list[uint8_t], TypeMeta[int](size=2)]
@@ -137,17 +137,17 @@ def test_basic_type_lists():
 
 
 class TestTypeFromAnnotation:
-    def test_un_annotated(self):
+    def test_un_annotated(self) -> None:
         assert type_from_annotation(str) is str
 
-    def test_single_annotation(self):
+    def test_single_annotation(self) -> None:
         assert type_from_annotation(Annotated[int, TypeMeta()]) is int
 
-    def test_nested_annotation(self):
+    def test_nested_annotation(self) -> None:
         assert type_from_annotation(Annotated[Annotated[int, TypeInfo("b", 1)], TypeMeta()]) is int
 
 
-def test_iterate_types():
+def test_iterate_types() -> None:
     @struct_dataclass
     class MyStruct(StructDataclass):
         foo: Annotated[list[uint8_t], TypeMeta[int](size=2)]
@@ -165,6 +165,6 @@ def test_iterate_types():
     assert list(iterate_types(MyStruct)) == results
 
 
-def test_typemeta_eq_failure():
+def test_typemeta_eq_failure() -> None:
     with pytest.raises(TypeError):
         assert TypeMeta() == 2
