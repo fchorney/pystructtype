@@ -4,7 +4,7 @@ import struct
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field, is_dataclass
-from typing import cast, overload
+from typing import TypeVar, cast, overload
 
 from pystructtype.structtypes import iterate_types
 
@@ -244,8 +244,12 @@ class StructDataclass:
         return struct.pack(self._endian(little_endian) + self.struct_fmt, *result)
 
 
+D = TypeVar("D", bound=StructDataclass)
+"""Generic Data Type bound to StructDataclass"""
+
+
 @overload
-def struct_dataclass(_cls: type[StructDataclass]) -> type[StructDataclass]:
+def struct_dataclass(_cls: type[D]) -> type[D]:
     """
     Overload for using a bare decorator
 
@@ -261,7 +265,7 @@ def struct_dataclass(_cls: type[StructDataclass]) -> type[StructDataclass]:
 
 
 @overload
-def struct_dataclass(_cls: None) -> Callable[[type[StructDataclass]], type[StructDataclass]]:
+def struct_dataclass(_cls: None) -> Callable[[type[D]], type[D]]:
     """
     Overload for using called decorator
 
@@ -277,8 +281,8 @@ def struct_dataclass(_cls: None) -> Callable[[type[StructDataclass]], type[Struc
 
 
 def struct_dataclass(
-    _cls: type[StructDataclass] | None = None,
-) -> Callable[[type[StructDataclass]], type[StructDataclass]] | type[StructDataclass]:
+    _cls: type[D] | None = None,
+) -> Callable[[type[D]], type[D]] | type[D]:
     """
     Decorator that does a bunch of metaprogramming magic to properly set up
     the defined Subclass of a StructDataclass
@@ -287,7 +291,7 @@ def struct_dataclass(
     :return: A Modified Subclass of a StructDataclass or a Callable that performs the same actions
     """
 
-    def inner(_cls: type[StructDataclass]) -> type[StructDataclass]:
+    def inner(_cls: type[D]) -> type[D]:
         """
         The inner function for `struct_dataclass` that actually does all the work
 
@@ -319,7 +323,7 @@ def struct_dataclass(
 
                 # Set a default if it does not yet exist
                 if not getattr(new_cls, type_iterator.key, None):
-                    default: type | int | float = type_iterator.base_type
+                    default: type | int | float | bytes = type_iterator.base_type
                     if type_iterator.type_meta and type_iterator.type_meta.default:
                         default = type_iterator.type_meta.default
                         if isinstance(default, list):
@@ -364,7 +368,7 @@ def struct_dataclass(
                         )
 
                 setattr(new_cls, type_iterator.key, default_list)
-        return cast(type[StructDataclass], dataclass(new_cls))
+        return cast(type[D], dataclass(new_cls))
 
     # If we use the decorator with empty parens, we simply return the inner callable
     if _cls is None:

@@ -5,20 +5,29 @@ from typing import Annotated, Any, TypeVar, get_args, get_origin, get_type_hints
 
 from pystructtype import structdataclass
 
-T = TypeVar("T", int, float, str, default=int)
-"""Generic Data Type for StructDataclass Contents"""
+T = TypeVar("T", int, float, bytes, default=int)
+"""Generic Data Type for TypeMeta Contents"""
 
 
-@dataclass(frozen=True)
+# This isn't defined as a Dataclass as it seems to mess with the TypeVar
 class TypeMeta[T]:
     """
     Class used to define Annotated Type Metadata for
     size and default values
     """
 
-    size: int = 1
-    chunk_size: int = 1
-    default: T | None = None
+    def __init__(self, size: int = 1, chunk_size: int = 1, default: T | None = None):
+        self.size = size
+        self.chunk_size = chunk_size
+        self.default = default
+
+    def __hash__(self):
+        return hash((self.size, self.chunk_size, self.default))
+
+    def __eq__(self, other: Any):
+        if not isinstance(other, TypeMeta):
+            raise TypeError("TypeMeta can not determine equality with non TypeMeta object")
+        return self.size == other.size and self.chunk_size == other.chunk_size and self.default == other.default
 
 
 @dataclass(frozen=True)
@@ -32,9 +41,7 @@ class TypeInfo:
     byte_size: int
 
 
-# Fixed Size Types
-char_t = Annotated[int, TypeInfo("c", 1)]
-"""1 Byte char Type"""
+# Fixed int Types
 int8_t = Annotated[int, TypeInfo("b", 1)]
 """1 Byte Signed int Type"""
 uint8_t = Annotated[int, TypeInfo("B", 1)]
@@ -59,7 +66,9 @@ float_t = Annotated[float, TypeInfo("f", 4)]
 """4 Byte float Type"""
 double_t = Annotated[float, TypeInfo("d", 8)]
 """8 Byte double Type"""
-string_t = Annotated[str, TypeInfo("s", 1)]
+char_t = Annotated[bytes, TypeInfo("c", 1)]
+"""1 Byte char Type"""
+string_t = Annotated[bytes, TypeInfo("s", 1)]
 """1 Byte char[] Type"""
 
 
@@ -149,12 +158,12 @@ def iterate_types(cls: type) -> Generator[TypeIterator]:
         yield TypeIterator(key, base_type, type_info, type_meta, is_list, is_pystructtype)
 
 
-def type_from_annotation(_type: type) -> type:
+def type_from_annotation(_type: Any) -> type:
     """
     Find the base type from an Annotated type,
     or return it unchanged if not Annotated
 
-    :param _type: Type to check
+    :param _type: Type or Annotated Type to check
     :return: Base type if Annotated, or the original passed in type otherwise
     """
     # If we have an origin for the given type, and it's Annotated
