@@ -13,10 +13,10 @@ classifiers = [
     "Operating System :: OS Independent",
     "Intended Audience :: Developers",
     "Topic :: Utilities",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 keywords = ["struct", "cstruct", "type"]
-requires-python = ">=3.13,<4.0"
+requires-python = ">=3.14,<4.0"
 dependencies = []
 
 [project.urls]
@@ -62,7 +62,7 @@ exclude_lines = ["if __name__ == .__main__.:", "def __str__", "def __repr__", "p
 package = true
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 line-length = 120
 indent-width = 4
 exclude = []
