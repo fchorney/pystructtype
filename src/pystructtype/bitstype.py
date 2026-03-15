@@ -1,10 +1,11 @@
 import itertools
 from collections.abc import Callable
 from dataclasses import field
-from typing import Any
+from typing import Annotated, Any
 
 from pystructtype.structdataclass import StructDataclass, struct_dataclass
-from pystructtype.utils import int_to_bool_list, list_chunks
+from pystructtype.structtypes import TypeMeta
+from pystructtype.utils import int_to_bool_list
 
 
 class BitsType(StructDataclass):
@@ -14,14 +15,14 @@ class BitsType(StructDataclass):
     """
 
     _raw: Any
-    _meta: dict
-    _meta_tuple: tuple
+    _meta: dict[str, int | list[int]]
+    _meta_tuple: tuple[tuple[str, ...], tuple[int | list[int], ...]]
 
     def __post_init__(self) -> None:
         super().__post_init__()
 
         # Convert the _meta_tuple data into a dictionary and put it into _meta
-        self._meta = {k: v for k, v in zip(*self._meta_tuple, strict=False)}
+        self._meta = dict(zip(*self._meta_tuple, strict=False))
 
     def _decode(self, data: list[int]) -> None:
         """
@@ -64,13 +65,7 @@ class BitsType(StructDataclass):
                 bin_data[v] = getattr(self, k)
 
         # Convert bin_data back into their correct integer locations
-        if isinstance(self._raw, list):
-            self._raw = [
-                sum(v << i for i, v in enumerate(chunk))
-                for chunk in list_chunks(bin_data, (self._byte_length // len(self._raw)) * 8)
-            ][::-1]
-        else:
-            self._raw = sum(v << i for i, v in enumerate(bin_data))
+        self._raw = sum(int(v) << i for i, v in enumerate(bin_data))
 
         # Run the super function to return the data in self._raw()
         return super()._encode()
@@ -127,12 +122,13 @@ def bits(_type: Any, definition: dict[str, int | list[int]]) -> Callable[[type[B
         # Create the defined attributes, defaults, and annotations in the class
         for key, value in definition.items():
             if isinstance(value, list):
+                # Use Annotated with TypeMeta(size=len=value) for list fields
                 setattr(
                     new_cls,
                     key,
-                    field(default_factory=lambda v=len(value): [False for _ in range(v)]),  # type: ignore # noqa: B008
+                    field(default_factory=lambda v=len(value): [False for _ in range(v)]),  # type: ignore
                 )
-                new_cls.__annotations__[key] = list[bool]
+                new_cls.__annotations__[key] = Annotated[list[bool], TypeMeta(size=len(value))]
             else:
                 setattr(new_cls, key, False)
                 new_cls.__annotations__[key] = bool

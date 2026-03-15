@@ -1,6 +1,8 @@
 import tomllib
 from datetime import datetime
 
+from sphinx.application import Sphinx
+
 # Sphinx Base --------------------------------------------------------------------------
 # Extensions
 extensions = [
@@ -61,7 +63,7 @@ exclude_patterns = ["autoapi_templates"]
 
 
 # Add any Sphinx plugin settings here that don't have global variables exposed.
-def setup(app):
+def setup(app: Sphinx) -> None:
     # App Settings ---------------------------------------------------------------------
     # Set source filetype(s)
     # Allow .rst files

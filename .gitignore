@@ -10,7 +10,11 @@ wheels/
 .venv
 
 # Coverage
+.coverage
 .coverage.*
 
 # PyCharm
 .idea*
+
+# Extra
+.DS_Store
