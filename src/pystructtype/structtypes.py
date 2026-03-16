@@ -153,7 +153,8 @@ def iterate_types(cls: type) -> Generator[TypeIterator]:
 
         # Determine if the type is a list
         # ex. list[bool] (yes) vs bool (no)
-        is_list = issubclass(origin, list) if (origin := get_origin(base_type)) else False
+        origin = get_origin(base_type)
+        is_list = issubclass(origin, list) if isinstance(origin, type) else False
 
         # Grab the first args value and look for any TypeMeta objects within
         type_args = get_args(hint)

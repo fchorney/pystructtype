@@ -3,12 +3,11 @@ from typing import Annotated
 
 import pytest
 
-from pystructtype import StructDataclass, TypeMeta, int8_t, struct_dataclass, uint8_t
+from pystructtype import StructDataclass, TypeMeta, int8_t, uint8_t
 
 
 # Test _simplify_format for various struct formats
 def test_simplify_format_merges_repeats() -> None:
-    @struct_dataclass
     class S(StructDataclass):
         a: uint8_t
         b: Annotated[list[uint8_t], TypeMeta(size=4)]
@@ -59,7 +58,6 @@ def test_endian() -> None:
 
 # Test size method
 def test_size() -> None:
-    @struct_dataclass
     class S(StructDataclass):
         a: Annotated[list[uint8_t], TypeMeta(size=3)]
 
@@ -69,12 +67,10 @@ def test_size() -> None:
 
 # Test nested StructDataclass encoding/decoding
 def test_nested_structdataclass() -> None:
-    @struct_dataclass
     class Inner(StructDataclass):
         x: uint8_t
         y: uint8_t
 
-    @struct_dataclass
     class Outer(StructDataclass):
         inner: Inner
         z: uint8_t
@@ -94,7 +90,6 @@ def test_nested_structdataclass() -> None:
 def test_decode_list_of_base_types() -> None:
     # Test _decode: attr is not a list, not a StructDataclass, state.size > 1
     # This will hit the 'else' branch for a list of base types
-    @struct_dataclass
     class SList(StructDataclass):
         a: Annotated[list[uint8_t], TypeMeta(size=2)]
 
@@ -106,7 +101,6 @@ def test_decode_list_of_base_types() -> None:
 
 # Test error paths in _decode and _encode
 def test_decode_encode_errors() -> None:
-    @struct_dataclass
     class S(StructDataclass):
         a: Annotated[list[uint8_t], TypeMeta(size=2)]
 
@@ -122,20 +116,6 @@ def test_decode_encode_errors() -> None:
         s._encode()
 
 
-# Test struct_dataclass decorator with and without parens
-def test_struct_dataclass_decorator_variants() -> None:
-    @struct_dataclass
-    class S1(StructDataclass):
-        a: uint8_t
-
-    @struct_dataclass  # Remove parens to match the overload signature
-    class S2(StructDataclass):
-        a: uint8_t
-
-    assert is_dataclass(S1)
-    assert is_dataclass(S2)
-
-
 # Test struct_dataclass: already a dataclass
 def test_struct_dataclass_already_dataclass() -> None:
     from dataclasses import dataclass as dc
@@ -144,13 +124,11 @@ def test_struct_dataclass_already_dataclass() -> None:
     class S(StructDataclass):
         a: uint8_t
 
-    result = struct_dataclass(S)
-    assert is_dataclass(result)
+    assert is_dataclass(S)
 
 
 # Test default value logic in struct_dataclass
 def test_struct_dataclass_default_value() -> None:
-    @struct_dataclass
     class S(StructDataclass):
         a: uint8_t
 
@@ -161,8 +139,7 @@ def test_struct_dataclass_default_value() -> None:
 # Test exception for list type with size=1
 def test_struct_dataclass_list_type_size_one() -> None:
     with pytest.raises(ValueError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S(StructDataclass):
             a: Annotated[list[uint8_t], TypeMeta(size=1)]
             # Should raise because list type with size=1 is not allowed
@@ -171,8 +148,7 @@ def test_struct_dataclass_list_type_size_one() -> None:
 # Test exception for non-list type with size>1
 def test_struct_dataclass_nonlist_type_size_gt_one() -> None:
     with pytest.raises(ValueError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S(StructDataclass):
             a: Annotated[uint8_t, TypeMeta(size=2)]
             # Should raise because non-list type with size>1 is not allowed
@@ -181,8 +157,7 @@ def test_struct_dataclass_nonlist_type_size_gt_one() -> None:
 # Test exception for default value as list
 def test_struct_dataclass_default_list_exception() -> None:
     with pytest.raises(TypeError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S(StructDataclass):
             a: Annotated[uint8_t, TypeMeta(default=[1, 2])]
             # Should raise because default value for attribute cannot be a list
@@ -194,7 +169,6 @@ def test_struct_dataclass_default_class_instance() -> None:
         def __init__(self) -> None:
             self.x = 1
 
-    @struct_dataclass
     class S(StructDataclass):
         a: Dummy
 
@@ -205,7 +179,6 @@ def test_struct_dataclass_default_class_instance() -> None:
 
 # Test struct_dataclass: default is a value
 def test_struct_dataclass_default_value_field() -> None:
-    @struct_dataclass
     class S(StructDataclass):
         a: Annotated[uint8_t, TypeMeta(default=5)]
 
@@ -215,7 +188,6 @@ def test_struct_dataclass_default_value_field() -> None:
 
 # Test struct_dataclass: default for list of values
 def test_struct_dataclass_default_list_of_values() -> None:
-    @struct_dataclass
     class S(StructDataclass):
         a: Annotated[list[uint8_t], TypeMeta(size=2, default=7)]
 
@@ -229,7 +201,6 @@ def test_struct_dataclass_default_list_of_class_instances() -> None:
         def __init__(self) -> None:
             self.x = 1
 
-    @struct_dataclass
     class S(StructDataclass):
         a: Annotated[list[Dummy], TypeMeta(size=2)]
 
@@ -238,7 +209,6 @@ def test_struct_dataclass_default_list_of_class_instances() -> None:
 
 
 def test_regular_class_attribute_is_ignored() -> None:
-    @struct_dataclass
     class S(StructDataclass):
         a: int
         b: str
@@ -256,7 +226,6 @@ def test_regular_class_attribute_is_ignored() -> None:
 
 
 def test_encode_decode_list_of_base_types() -> None:
-    @struct_dataclass
     class S(StructDataclass):
         a: Annotated[list[uint8_t], TypeMeta(size=3)]
 
@@ -269,7 +238,6 @@ def test_encode_decode_list_of_base_types() -> None:
 
 
 def test_structdataclass_regular_field_ignored() -> None:
-    @struct_dataclass
     class S(StructDataclass):
         a: int
         b: str
@@ -282,7 +250,6 @@ def test_structdataclass_regular_field_ignored() -> None:
 
 # Covers: 259, 275 (non-pystructtype, non-class field is ignored)
 def test_structdataclass_non_pystructtype_non_class_field() -> None:
-    @struct_dataclass
     class S(StructDataclass):
         a: int
 
@@ -294,8 +261,7 @@ def test_structdataclass_non_pystructtype_non_class_field() -> None:
 # Covers: 311 (not type_iterator.is_list)
 def test_structdataclass_nonlist_type_with_size_gt_one() -> None:
     with pytest.raises(ValueError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S(StructDataclass):
             a: Annotated[int, TypeMeta(size=2)]
 
@@ -303,8 +269,7 @@ def test_structdataclass_nonlist_type_with_size_gt_one() -> None:
 # Covers: 328, 345-346, 348 (default is a list, default is a class)
 def test_structdataclass_default_list_typeerror() -> None:
     with pytest.raises(TypeError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S(StructDataclass):
             a: Annotated[int, TypeMeta(default=[1, 2])]
 
@@ -315,7 +280,6 @@ def test_structdataclass_default_class_factory() -> None:
             self.x = 1
 
     # Use an instance as the default to trigger deepcopy path
-    @struct_dataclass
     class S(StructDataclass):
         a: Annotated[Dummy, TypeMeta(default=Dummy())]
 
@@ -329,7 +293,6 @@ def test_structdataclass_list_of_classes_default_factory() -> None:
         def __init__(self) -> None:
             self.x = 1
 
-    @struct_dataclass
     class S(StructDataclass):
         a: Annotated[list[Dummy], TypeMeta(size=2)]
 
@@ -338,11 +301,9 @@ def test_structdataclass_list_of_classes_default_factory() -> None:
 
 
 def test_structdataclass_list_of_structdataclass_encode_decode() -> None:
-    @struct_dataclass
     class Inner(StructDataclass):
         x: uint8_t
 
-    @struct_dataclass
     class Outer(StructDataclass):
         inners: Annotated[list[Inner], TypeMeta(size=2)]
 
@@ -360,24 +321,21 @@ def test_structdataclass_list_of_structdataclass_encode_decode() -> None:
 
 def test_structdataclass_list_type_size_one_error() -> None:
     with pytest.raises(ValueError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S(StructDataclass):
             a: Annotated[list[uint8_t], TypeMeta(size=1)]
 
 
 def test_structdataclass_nonlist_type_size_gt_one_error() -> None:
     with pytest.raises(ValueError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S(StructDataclass):
             a: Annotated[uint8_t, TypeMeta(size=2)]
 
 
 def test_structdataclass_default_list_type_error() -> None:
     with pytest.raises(TypeError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S(StructDataclass):
             a: Annotated[uint8_t, TypeMeta(default=[1, 2])]
 
@@ -386,15 +344,13 @@ def test_structdataclass_invalid_branches_all() -> None:
     # 259, 275: non-pystructtype, non-class field is ignored (already covered by regular field tests)
     # 311: not type_iterator.is_list, but size > 1
     with pytest.raises(ValueError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S1(StructDataclass):
             a: Annotated[int, TypeMeta(size=2)]
 
     # 328, 345-346: default is a list
     with pytest.raises(TypeError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S2(StructDataclass):
             a: Annotated[int, TypeMeta(default=[1, 2])]
 
@@ -403,7 +359,6 @@ def test_structdataclass_invalid_branches_all() -> None:
         def __init__(self) -> None:
             self.x = 1
 
-    @struct_dataclass
     class S3(StructDataclass):
         a: Annotated[Dummy, TypeMeta(default=Dummy)]
 
@@ -411,7 +366,6 @@ def test_structdataclass_invalid_branches_all() -> None:
     assert isinstance(s3.a, Dummy)
 
     # Test for default is an instance (should use deepcopy)
-    @struct_dataclass
     class S3b(StructDataclass):
         a: Annotated[Dummy, TypeMeta(default=Dummy())]
 
@@ -419,7 +373,6 @@ def test_structdataclass_invalid_branches_all() -> None:
     assert isinstance(s3b.a, Dummy)
 
     # 368, 379: default_list for list of classes
-    @struct_dataclass
     class S4(StructDataclass):
         a: Annotated[list[Dummy], TypeMeta(size=2)]
 
@@ -427,15 +380,13 @@ def test_structdataclass_invalid_branches_all() -> None:
     assert isinstance(s4.a, list) and all(isinstance(x, Dummy) for x in s4.a)
     # 311: list type with size == 1
     with pytest.raises(ValueError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S5(StructDataclass):
             a: Annotated[list[int], TypeMeta(size=1)]
 
 
 def test_structdataclass_defensive_branches() -> None:
     # 259, 275: non-pystructtype, non-class field is ignored (should not raise, just skip)
-    @struct_dataclass
     class S1(StructDataclass):
         a: int  # not Annotated, not a class, should be ignored
 
@@ -445,15 +396,13 @@ def test_structdataclass_defensive_branches() -> None:
 
     # 311: not type_iterator.is_list, but size > 1 (should raise ValueError)
     with pytest.raises(ValueError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S2(StructDataclass):
             a: Annotated[int, TypeMeta(size=2)]
 
     # 345-346: default is a list (should raise TypeError)
     with pytest.raises(TypeError):
-
-        @struct_dataclass
+        # noinspection PyUnusedLocal
         class S3(StructDataclass):
             a: Annotated[int, TypeMeta(default=[1, 2])]
 
@@ -462,7 +411,6 @@ def test_structdataclass_defensive_branches() -> None:
         def __init__(self) -> None:
             self.x = 1
 
-    @struct_dataclass
     class S4(StructDataclass):
         a: Annotated[Dummy, TypeMeta(default=Dummy)]
 
@@ -470,7 +418,6 @@ def test_structdataclass_defensive_branches() -> None:
     assert isinstance(s4.a, Dummy)
 
     # 368, 379: default_list for list of classes (should use default_factory for list of Dummy)
-    @struct_dataclass
     class S5(StructDataclass):
         a: Annotated[list[Dummy], TypeMeta(size=2)]
 

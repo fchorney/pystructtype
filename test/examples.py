@@ -1,9 +1,9 @@
 import itertools
 from dataclasses import field
 from enum import IntEnum
-from typing import Annotated
+from typing import Annotated, ClassVar
 
-from pystructtype import BitsType, StructDataclass, TypeMeta, bits, struct_dataclass, uint8_t, uint16_t
+from pystructtype import BitsType, StructDataclass, TypeMeta, uint8_t, uint16_t
 from pystructtype.utils import list_chunks
 
 TEST_CONFIG_DATA = [
@@ -299,14 +299,16 @@ class Sensor(IntEnum):
     DOWN = 3
 
 
-@bits(uint8_t, {"autolights": 0, "fsr": 1})
 class FlagsType(BitsType):
+    __bits_type__: ClassVar = uint8_t
+    __bits_definition__: ClassVar = {"autolights": 0, "fsr": 1}
     autolights: bool
     fsr: bool
 
 
-@bits(uint16_t, {"steps": [0, 1, 2, 3, 4, 5, 6, 7, 8]})
 class PanelMaskType(BitsType):
+    __bits_type__: ClassVar = uint16_t
+    __bits_definition__: ClassVar = {"steps": [0, 1, 2, 3, 4, 5, 6, 7, 8]}
     steps: list[bool]
 
     def __getitem__(self, index: int) -> bool:
@@ -321,7 +323,6 @@ class PanelMaskType(BitsType):
         self.steps[index] = value
 
 
-@struct_dataclass
 class EnabledSensors(StructDataclass):
     # We can define the actual data we are ingesting here
     _raw: Annotated[list[uint8_t], TypeMeta(size=5)]
@@ -368,7 +369,6 @@ class EnabledSensors(StructDataclass):
         self._data[index] = value
 
 
-@struct_dataclass
 class PackedPanelSettingsType(StructDataclass):
     load_cell_low_threshold: uint8_t
     load_cell_high_threshold: uint8_t
@@ -382,14 +382,12 @@ class PackedPanelSettingsType(StructDataclass):
     reserved: uint16_t
 
 
-@struct_dataclass
 class RGBType(StructDataclass):
     r: uint8_t
     g: uint8_t
     b: uint8_t
 
 
-@struct_dataclass
 class SMXConfigType(StructDataclass):
     master_version: uint8_t = 0xFF
 
