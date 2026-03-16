@@ -1,4 +1,4 @@
-from pystructtype.bitstype import BitsType, bits
+from pystructtype.bitstype import BitsType
 from pystructtype.structdataclass import StructDataclass, struct_dataclass
 from pystructtype.structtypes import (
     TypeInfo,
@@ -22,7 +22,6 @@ __all__ = [
     "StructDataclass",
     "TypeInfo",
     "TypeMeta",
-    "bits",
     "char_t",
     "double_t",
     "float_t",

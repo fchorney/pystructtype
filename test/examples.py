@@ -1,9 +1,9 @@
 import itertools
 from dataclasses import field
 from enum import IntEnum
-from typing import Annotated
+from typing import Annotated, ClassVar
 
-from pystructtype import BitsType, StructDataclass, TypeMeta, bits, struct_dataclass, uint8_t, uint16_t
+from pystructtype import BitsType, StructDataclass, TypeMeta, struct_dataclass, uint8_t, uint16_t
 from pystructtype.utils import list_chunks
 
 TEST_CONFIG_DATA = [
@@ -299,14 +299,16 @@ class Sensor(IntEnum):
     DOWN = 3
 
 
-@bits(uint8_t, {"autolights": 0, "fsr": 1})
 class FlagsType(BitsType):
+    __bits_type__: ClassVar = uint8_t
+    __bits_definition__: ClassVar = {"autolights": 0, "fsr": 1}
     autolights: bool
     fsr: bool
 
 
-@bits(uint16_t, {"steps": [0, 1, 2, 3, 4, 5, 6, 7, 8]})
 class PanelMaskType(BitsType):
+    __bits_type__: ClassVar = uint16_t
+    __bits_definition__: ClassVar = {"steps": list(range(9))}
     steps: list[bool]
 
     def __getitem__(self, index: int) -> bool:

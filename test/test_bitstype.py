@@ -1,16 +1,20 @@
-from pystructtype import BitsType, bits, uint8_t, uint16_t
+from typing import ClassVar
+
+from pystructtype import BitsType, uint8_t, uint16_t
 
 
-# Use a list of length > 1 for 'b', and ensure the bits decorator works with the current structdataclass logic
-@bits(uint8_t, {"a": 0, "b": [1, 2], "c": 3})
+# Use a list of length > 1 for 'b', and ensure the bits logic works with the current structdataclass logic
 class MyBits(BitsType):
+    __bits_type__: ClassVar = uint8_t
+    __bits_definition__: ClassVar = {"a": 0, "b": [1, 2], "c": 3}
     a: bool
     b: list[bool]
     c: bool
 
 
-@bits(uint16_t, {"x": list(range(16))})
 class MyBits16(BitsType):
+    __bits_type__: ClassVar = uint16_t
+    __bits_definition__: ClassVar = {"x": list(range(16))}
     x: list[bool]
 
 
@@ -40,8 +44,6 @@ def test_bits_decode_encode_list():
     b = MyBits16()
     b._raw = 0b1010101010101010
     b._decode([0b10101010, 0b10101010])
-    # Print actual value for debugging
-    print("Decoded b.x:", b.x)
     # Accept any bit order, just check length and type
     assert isinstance(b.x, list)
     assert len(b.x) == 16
@@ -60,11 +62,13 @@ def test_bits_edge_cases():
     b._decode([0xFF])
     assert b.a
     assert all(b.b)
-    assert b.c or not b.c  # c is bit 3, could be True or False
+    assert b.c
+
     # All bits clear
     b._raw = 0
     b._decode([0])
     assert not b.a
+    # noinspection PyTypeChecker
     assert all(not x for x in b.b)
     assert not b.c
 

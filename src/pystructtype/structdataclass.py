@@ -374,7 +374,8 @@ def struct_dataclass[D](
                         )
 
                 setattr(new_cls, type_iterator.key, default_list)
-        return dataclass(new_cls)
+        dataclass(new_cls)
+        return new_cls
 
     # If we use the decorator with empty parens, we simply return the inner callable
     if _cls is None:
