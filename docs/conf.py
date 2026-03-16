@@ -12,7 +12,8 @@ extensions = [
     "sphinx.ext.viewcode",
     # https://sphinx-autoapi.readthedocs.io/en/latest/
     "autoapi.extension",
-    "sphinx.ext.autodoc.typehints",
+    # https://github.com/agronholm/sphinx-autodoc-typehints
+    "sphinx_autodoc_typehints",
 ]
 
 # Set initial page name
