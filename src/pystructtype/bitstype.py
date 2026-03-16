@@ -2,9 +2,9 @@ import itertools
 from collections.abc import Mapping
 from dataclasses import field
 from types import MappingProxyType
-from typing import Annotated, Any, ClassVar
+from typing import Annotated, ClassVar
 
-from pystructtype.structdataclass import StructDataclass, struct_dataclass
+from pystructtype.structdataclass import StructDataclass
 from pystructtype.structtypes import TypeMeta
 from pystructtype.utils import int_to_bool_list
 
@@ -17,9 +17,8 @@ class BitsType(StructDataclass):
     __bits_type__: ClassVar[type]
     __bits_definition__: ClassVar[dict[str, int | list[int]] | Mapping[str, int | list[int]]]
 
-    _raw: Any
+    _raw: int
     _meta: dict[str, int | list[int]]
-    _meta_tuple: tuple[tuple[str, ...], tuple[int | list[int], ...]]
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -30,20 +29,21 @@ class BitsType(StructDataclass):
             )
         bits_type = cls.__bits_type__
         definition = cls.__bits_definition__
+
         # Automatically wrap in MappingProxyType if it's a dict and not already immutable
         if isinstance(definition, dict) and not isinstance(definition, MappingProxyType):
             definition = MappingProxyType(definition)
             cls.__bits_definition__ = definition
 
-        # Set the correct type for the raw data
-        cls.__annotations__["_raw"] = bits_type
-        cls._meta = field(default_factory=dict)
-        cls.__annotations__["_meta"] = dict[str, int]
+        # # Remove __bits_type__ and __bits_definition__ from __annotations__ if present
+        # cls.__annotations__.pop("__bits_type__", None)
+        # cls.__annotations__.pop("__bits_definition__", None)
 
-        # Convert the definition to a named tuple, so it's Immutable
-        meta_tuple = (tuple(definition.keys()), tuple(definition.values()))
-        cls._meta_tuple = field(default_factory=lambda d=meta_tuple: d)  # type: ignore
-        cls.__annotations__["_meta_tuple"] = tuple
+        # Set the correct type for the raw data
+        cls._raw = 0
+        cls.__annotations__["_raw"] = bits_type
+
+        cls._meta = field(default_factory=dict)
 
         # Create the defined attributes, defaults, and annotations in the class
         for key, value in definition.items():
@@ -58,11 +58,9 @@ class BitsType(StructDataclass):
                 setattr(cls, key, False)
                 cls.__annotations__[key] = bool
 
-        struct_dataclass(cls)
-
     def __post_init__(self) -> None:
         super().__post_init__()
-        self._meta = dict(zip(*self._meta_tuple, strict=False))
+        self._meta = dict(self.__bits_definition__)
 
     def _decode(self, data: list[int]) -> None:
         super()._decode(data)
@@ -84,4 +82,5 @@ class BitsType(StructDataclass):
             else:
                 bin_data[v] = getattr(self, k)
         self._raw = sum(int(v) << i for i, v in enumerate(bin_data))
+        # Return _raw as a list of bytes (little-endian)
         return super()._encode()

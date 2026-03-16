@@ -13,7 +13,6 @@ from pystructtype import (
     int32_t,
     int64_t,
     string_t,
-    struct_dataclass,
     uint8_t,
     uint16_t,
     uint32_t,
@@ -23,99 +22,83 @@ from pystructtype.structtypes import TypeInfo, TypeIterator, iterate_types, type
 
 
 def test_char_t() -> None:
-    @struct_dataclass
-    class MyStruct(StructDataclass):
+    class MyStructChar(StructDataclass):
         foo: char_t
 
     data = [ord(b"A")]
-    s = MyStruct()
+    s = MyStructChar()
     s.decode(data)
-
     assert s.foo == b"A"
-
     e = s.encode()
     assert s._to_list(e) == data
 
 
 def test_string_t() -> None:
-    @struct_dataclass
-    class MyStruct(StructDataclass):
+    class MyStructString(StructDataclass):
         foo: string_t
         bar: Annotated[string_t, TypeMeta[bytes](chunk_size=3)]
 
-    data = MyStruct._to_list(b"ABCD")
-    s = MyStruct()
+    data = MyStructString._to_list(b"ABCD")
+    s = MyStructString()
     s.decode(data)
-
     assert s.foo == b"A"
     assert s.bar == b"BCD"
-
     e = s.encode()
     assert s._to_list(e) == data
 
 
 def test_unsigned_int() -> None:
-    @struct_dataclass
-    class MyStruct(StructDataclass):
+    class MyStructUnsigned(StructDataclass):
         foo8: uint8_t
         foo16: uint16_t
         foo32: uint32_t
         foo64: uint64_t
 
     data = [254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254]
-    s = MyStruct()
+    s = MyStructUnsigned()
     s.decode(data)
-
     assert s.foo8 == 254
-    assert s.foo16 == 65_278
-    assert s.foo32 == 4_278_124_286
-    assert s.foo64 == 18_374_403_900_871_474_942
-
+    assert s.foo16 == 65278
+    assert s.foo32 == 4278124286
+    assert s.foo64 == 18374403900871474942
     e = s.encode()
     assert s._to_list(e) == data
 
 
 def test_signed_int() -> None:
-    @struct_dataclass
-    class MyStruct(StructDataclass):
+    class MyStructSigned(StructDataclass):
         foo8: int8_t
         foo16: int16_t
         foo32: int32_t
         foo64: int64_t
 
     data = [254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254, 254]
-    s = MyStruct()
+    s = MyStructSigned()
     s.decode(data)
-
     assert s.foo8 == -2
     assert s.foo16 == -258
-    assert s.foo32 == -16_843_010
-    assert s.foo64 == -72_340_172_838_076_674
-
+    assert s.foo32 == -16843010
+    assert s.foo64 == -72340172838076674
     e = s.encode()
     assert s._to_list(e) == data
 
 
 def test_floating_points() -> None:
-    @struct_dataclass
-    class MyStruct(StructDataclass):
+    class MyStructFloat(StructDataclass):
         foo: float_t
         bar: double_t
 
     data = [68, 154, 82, 43, 65, 157, 111, 52, 87, 243, 91, 168]
-    s = MyStruct()
+    s = MyStructFloat()
     s.decode(data)
-
     assert s.foo == 1234.5677490234375
     assert s.bar == 123456789.987654321
-
     e = s.encode()
     assert s._to_list(e) == data
 
 
 def test_basic_type_lists() -> None:
-    @struct_dataclass
-    class MyStruct(StructDataclass):
+    class MyStructList(StructDataclass):
         int_type: Annotated[list[uint8_t], TypeMeta[int](size=2)]
         float_type: Annotated[list[float_t], TypeMeta[float](size=2)]
         char_type: Annotated[list[char_t], TypeMeta[bytes](size=2)]
@@ -123,13 +106,11 @@ def test_basic_type_lists() -> None:
 
     int_data = [1, 2]
     float_data = [68, 154, 82, 43, 67, 153, 81, 42]
-    char_data = MyStruct._to_list(b"AB")
-    string_data = MyStruct._to_list(b"ABCD")
-
+    char_data = MyStructList._to_list(b"AB")
+    string_data = MyStructList._to_list(b"ABCD")
     data = int_data + float_data + char_data + string_data
-    s = MyStruct()
+    s = MyStructList()
     s.decode(data)
-
     assert s.int_type == [1, 2]
     assert s.float_type == [1234.5677490234375, 306.63409423828125]
     assert s.char_type == [b"A", b"B"]
@@ -148,7 +129,6 @@ class TestTypeFromAnnotation:
 
 
 def test_iterate_types() -> None:
-    @struct_dataclass
     class MyStruct(StructDataclass):
         foo: Annotated[list[uint8_t], TypeMeta[int](size=2)]
 

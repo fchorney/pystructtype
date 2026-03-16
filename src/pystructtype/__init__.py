@@ -1,5 +1,5 @@
 from pystructtype.bitstype import BitsType
-from pystructtype.structdataclass import StructDataclass, struct_dataclass
+from pystructtype.structdataclass import StructDataclass
 from pystructtype.structtypes import (
     TypeInfo,
     TypeMeta,
@@ -30,7 +30,6 @@ __all__ = [
     "int32_t",
     "int64_t",
     "string_t",
-    "struct_dataclass",
     "uint8_t",
     "uint16_t",
     "uint32_t",

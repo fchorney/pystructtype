@@ -1,10 +1,9 @@
 import inspect
 import re
 import struct
-from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field, is_dataclass
-from typing import TypeVar, overload
+from typing import ClassVar
 
 from pystructtype.structtypes import iterate_types
 
@@ -27,6 +26,87 @@ class StructDataclass:
     Class that will auto-magically decode and encode data for the defined
     subclass.
     """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # If the class is already a dataclass, skip
+        if is_dataclass(cls):
+            return
+        # Make sure any fields without a default have one
+        for type_iterator in iterate_types(cls):
+            if type_iterator.key.startswith("__"):
+                # Ignore double underscore vars
+                continue
+
+            if not type_iterator.is_pystructtype and not inspect.isclass(type_iterator.base_type):
+                continue
+            if not type_iterator.type_meta or type_iterator.type_meta.size == 1:
+                if type_iterator.is_list:
+                    raise ValueError(f"Attribute {type_iterator.key} is defined as a list type but has size set to 1")
+                if not getattr(cls, type_iterator.key, None):
+                    default = type_iterator.base_type
+                    if type_iterator.type_meta:
+                        if type_iterator.type_meta.default is not None:
+                            default = type_iterator.type_meta.default
+                            if isinstance(default, list):
+                                raise TypeError(f"default value for {type_iterator.key} attribute can not be a list")
+                            if inspect.isclass(default):
+                                default = field(default_factory=default)
+                                setattr(cls, type_iterator.key, default)
+                                continue
+                    if inspect.isclass(default):
+                        default = field(default_factory=default)
+                    else:
+                        default = field(default_factory=lambda d=default: deepcopy(d))  # type: ignore
+                    setattr(cls, type_iterator.key, default)
+            else:
+                if not type_iterator.is_list:
+                    raise ValueError(f"Attribute {type_iterator.key} is not a list type but has a size > 1")
+                if type_iterator.type_meta and type_iterator.type_meta.default:
+                    default = type_iterator.type_meta.default
+                    if isinstance(default, list):
+                        default_tuple = tuple(deepcopy(default))
+                        default_list = field(default_factory=lambda d=default_tuple: list(d))  # type: ignore
+                    elif inspect.isclass(default):
+                        default_list = field(
+                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
+                                d() for _ in range(s)
+                            ]
+                        )
+                    else:
+                        default_list = field(
+                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
+                                deepcopy(d) for _ in range(s)
+                            ]
+                        )
+                else:
+                    default = type_iterator.base_type
+                    if inspect.isclass(default):
+                        default_list = field(
+                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
+                                d() for _ in range(s)
+                            ]
+                        )
+                    else:
+                        default_list = field(
+                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
+                                deepcopy(d) for _ in range(s)
+                            ]
+                        )
+                setattr(cls, type_iterator.key, default_list)
+        # Remove ClassVar-annotated keys from __annotations__ and class dict before dataclass(cls)
+        classvar_keys = [k for k, v in list(cls.__annotations__.items()) if getattr(v, "__origin__", None) is ClassVar]
+        # Save and remove from class dict
+        classvar_backup = {}
+        for k in classvar_keys:
+            cls.__annotations__.pop(k, None)
+            if hasattr(cls, k):
+                classvar_backup[k] = getattr(cls, k)
+                delattr(cls, k)
+        dataclass(cls)
+        # Restore classvars
+        for k, v in classvar_backup.items():
+            setattr(cls, k, v)
 
     def __post_init__(self) -> None:
         self._state: list[StructState] = []
@@ -237,150 +317,3 @@ class StructDataclass:
         """
         result = self._encode()
         return struct.pack(self._endian(little_endian) + self.struct_fmt, *result)
-
-
-D = TypeVar("D", bound=StructDataclass)
-"""Generic Data Type bound to StructDataclass"""
-
-
-@overload
-def struct_dataclass[D](_cls: type[D]) -> type[D]:
-    """
-    Overload for using a bare decorator
-
-    @struct_dataclass
-    class foo(StructDataclass): ...
-
-    Equivalent to: struct_dataclass(foo)
-
-    :param _cls: Subtype of StructDataclass
-    :return: Modified Subtype of StructDataclass
-    """
-    pass  # pragma: no cover
-
-
-@overload
-def struct_dataclass[D](_cls: None) -> Callable[[type[D]], type[D]]:
-    """
-    Overload for using called decorator
-
-    @struct_dataclass()
-    class foo(StructDataclass): ...
-
-    Equivalent to: struct_dataclass()(foo)
-
-    :param _cls: None
-    :return: Callable that takes in a Subtype of StructDataclass and returns a modified Subtype
-    """
-    pass  # pragma: no cover
-
-
-def struct_dataclass[D](
-    _cls: type[D] | None = None,
-) -> Callable[[type[D]], type[D]] | type[D]:
-    """
-    Decorator that does a bunch of metaprogramming magic to properly set up
-    the defined Subclass of a StructDataclass
-
-    :param _cls: A Subclass of StructDataclass or None
-    :return: A Modified Subclass of a StructDataclass or a Callable that performs the same actions
-    """
-
-    def inner(_cls: type[D]) -> type[D]:
-        """
-        The inner function for `struct_dataclass` that actually does all the work
-
-        :param _cls: A Subclass of StructDataclass
-        :return: A Modified Subclass of a StructDataclass
-        """
-        new_cls = _cls
-
-        # new_cls should not already be a dataclass,
-        # but it will be a subtype of Dataclass by the end of this function
-        if is_dataclass(new_cls):
-            # Just try to cast it again, and return
-            return new_cls
-
-        # Make sure any fields without a default have one
-        # This prevents Dataclass from being mad that we might have attributes defined with
-        # defaults interwoven between ones that don't
-        for type_iterator in iterate_types(new_cls):
-            # If the current type is just a base type, then we can essentially ignore it
-            # These are typically used for extra processing and not included in the decode/encode
-            if not type_iterator.is_pystructtype and not inspect.isclass(type_iterator.base_type):
-                continue
-
-            if not type_iterator.type_meta or type_iterator.type_meta.size == 1:
-                # This type either has no metadata, or is defined as having a size of 1 and is
-                # therefore not a list
-                if type_iterator.is_list:
-                    raise ValueError(f"Attribute {type_iterator.key} is defined as a list type but has size set to 1")
-
-                # Set a default if it does not yet exist
-                if not getattr(new_cls, type_iterator.key, None):
-                    default: type | int | float | bytes = type_iterator.base_type
-                    if type_iterator.type_meta:
-                        if type_iterator.type_meta.default is not None:
-                            default = type_iterator.type_meta.default
-                            if isinstance(default, list):
-                                raise TypeError(f"default value for {type_iterator.key} attribute can not be a list")
-                            if inspect.isclass(default):
-                                default = field(default_factory=default)
-                                setattr(new_cls, type_iterator.key, default)
-                                continue
-                    # Create a new instance of the class, or value
-                    if inspect.isclass(default):
-                        default = field(default_factory=default)
-                    else:
-                        default = field(default_factory=lambda d=default: deepcopy(d))  # type: ignore
-                    setattr(new_cls, type_iterator.key, default)
-            else:
-                # This assumes we want multiple items of base_type, so make sure the given base_type is
-                # properly set to be a list as well
-                if not type_iterator.is_list:
-                    raise ValueError(f"Attribute {type_iterator.key} is not a list type but has a size > 1")
-
-                if type_iterator.type_meta and type_iterator.type_meta.default:
-                    default = type_iterator.type_meta.default
-                    if isinstance(default, list):
-                        # Avoid mutable default in lambda by using tuple and converting back to list
-                        default_tuple = tuple(deepcopy(default))
-                        default_list = field(default_factory=lambda d=default_tuple: list(d))
-                    elif inspect.isclass(default):
-                        default_list = field(
-                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
-                                d() for _ in range(s)
-                            ]
-                        )
-                    else:
-                        default_list = field(
-                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
-                                deepcopy(d) for _ in range(s)
-                            ]
-                        )
-                else:
-                    default = type_iterator.base_type
-                    if inspect.isclass(default):
-                        default_list = field(
-                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
-                                d() for _ in range(s)
-                            ]
-                        )
-                    else:
-                        default_list = field(
-                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
-                                deepcopy(d) for _ in range(s)
-                            ]
-                        )
-
-                setattr(new_cls, type_iterator.key, default_list)
-        dataclass(new_cls)
-        return new_cls
-
-    # If we use the decorator with empty parens, we simply return the inner callable
-    if _cls is None:
-        return inner
-
-    # If we use the decorator with no parens, we return the result of passing the _cls
-    # to the inner callable
-    return inner(_cls)

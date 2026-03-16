@@ -34,7 +34,6 @@ struct MyStruct {
 ```
 
 ```python
-@struct_dataclass
 class MyStruct(StructDataclass):
     myNum: int16_t
     myLetter: char_t
@@ -61,7 +60,6 @@ struct MyStruct {
 };
 ```
 ```python
-@struct_dataclass
 class MyStruct(StructDataclass):
     myInts: Annotated[list[uint8_t], TypeMeta(size=4)]
     myBiggerInts: Annotated[list[uint16_t], TypeMeta(size=2)]
@@ -87,7 +85,6 @@ struct MyStruct {
 ```
 
 ```python
-@struct_dataclass
 class MyStruct(StructDataclass):
     myInt: uint8_t = 5
     myInts: Annnotated[list[uint8_t], TypeMeta(size=2, default=1)]
@@ -117,7 +114,6 @@ struct MyStruct {
 };
 ```
 ```python
-@struct_dataclass
 class MyStruct(StructDataclass):
     myStr: Annotated[string_t, TypeMeta[str](chunk_size=3)]
     myStrList: Annotated[list[string_t], TypeMeta[str](size=2, chunk_size=3)]
@@ -147,8 +143,9 @@ enum ConfigFlags {
 ```
 
 ```python
-@bits(uint8_t, {"lights_flag": 0, "platform_flag": 1})
-class FlagsType(BitsType): ...
+class FlagsType(BitsType):
+    __bits_type__ = uint8_t
+    __bits_definition__ = {"lights_flag": 0, "platform_flag": 1}
 
 f = FlagsType()
 f.decode([3])
@@ -178,7 +175,6 @@ struct MyStruct {
 ```
 
 ```python
-@struct_dataclass
 class EnabledSensors(StructDataclass):
     # We can define the actual data we are ingesting here
     # This mirrors the `uint8_t enabledSensors[5]` data
@@ -264,15 +260,13 @@ struct LEDS {
 ```
 
 ```python
-@struct_dataclass
 class RGB(StructDataclass):
     r: uint8_t
     g: uint8_t
     b: uint8_t
 
-@struct_dataclass
 class LEDS(StructDataclass):
-    lights: Annotated[list[RGB], TypeMeta(size=3])]
+    lights: Annotated[list[RGB], TypeMeta(size=3)]
 
 l = LEDS()
 l.decode([1, 2, 3, 4, 5, 6, 7, 8, 9])
@@ -288,4 +282,4 @@ l.decode([1, 2, 3, 4, 5, 6, 7, 8, 9])
 
 # Examples
 
-You can see a more fully fledged example in the `test/examples.py` file. 
+You can see a more fully fledged example in the `test/examples.py` file.
