@@ -1,3 +1,7 @@
+"""
+Sphinx configuration for pystructtype documentation.
+"""
+
 import tomllib
 from datetime import datetime
 

@@ -1,7 +1,11 @@
+"""
+structtypes: Type system and helpers for pystructtype.
+"""
+
 import inspect
 from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Annotated, Any, TypeVar, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, ClassVar, TypeVar, get_args, get_origin, get_type_hints
 
 from pystructtype import structdataclass
 
@@ -30,7 +34,7 @@ from pystructtype import structdataclass
 # y: Annotated[int, Bar(foo=2)]
 # u: Annotated[int, Bar[int](foo=2, bar=3)]
 
-T = TypeVar("T", int, float, bytes, default=int)
+T = TypeVar("T", int, float, bytes, bool, default=int)
 """Generic Data Type for TypeMeta Contents"""
 
 
@@ -84,9 +88,9 @@ int64_t = Annotated[int, TypeInfo("q", 8)]
 uint64_t = Annotated[int, TypeInfo("Q", 8)]
 """8 Byte Unsigned int Type"""
 
-# TODO: Make a special Bool class to auto-convert from int to bool
-
 # Named Types
+bool_t = Annotated[bool, TypeInfo("?", 1)]
+"""1 Byte bool Type"""
 float_t = Annotated[float, TypeInfo("f", 4)]
 """4 Byte float Type"""
 double_t = Annotated[float, TypeInfo("d", 8)]
@@ -109,7 +113,7 @@ class TypeIterator:
     key: str
     base_type: type
     type_info: TypeInfo | None
-    type_meta: TypeMeta | None
+    type_meta: TypeMeta[Any] | None
     is_list: bool
     is_pystructtype: bool
 
@@ -146,8 +150,15 @@ def iterate_types(cls: type) -> Generator[TypeIterator]:
 
     :param cls: A StructDataclass class object (not an instantiated object)
     :return: Yield a TypeIterator object
+    :raises TypeError: If cls is not a type
     """
+    if not isinstance(cls, type):
+        raise TypeError("iterate_types expects a class type as input")
     for key, hint in get_type_hints(cls, include_extras=True).items():
+        # Skip ClassVar and similar non-instance attributes
+        if get_origin(hint) is ClassVar or hint is ClassVar:
+            continue
+
         # Grab the base type from a possibly annotated type hint
         base_type = type_from_annotation(hint)
 
@@ -184,10 +195,9 @@ def iterate_types(cls: type) -> Generator[TypeIterator]:
         yield TypeIterator(key, base_type, type_info, type_meta, is_list, is_pystructtype)
 
 
-def type_from_annotation(_type: Any) -> type:
+def type_from_annotation(_type: Any) -> type[Any]:
     """
-    Find the base type from an Annotated type,
-    or return it unchanged if not Annotated
+    Find the base type from an Annotated type, or return it unchanged if not Annotated.
 
     :param _type: Type or Annotated Type to check
     :return: Base type if Annotated, or the original passed in type otherwise
@@ -202,6 +212,6 @@ def type_from_annotation(_type: Any) -> type:
             arg = t[0]
 
         # This will be the base type
-        return arg
+        return arg  # type: ignore[no-any-return]
     # No origin, or the origin is not Annotated, just return the given type
-    return _type
+    return _type  # type: ignore[no-any-return]

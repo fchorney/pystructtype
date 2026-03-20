@@ -1,3 +1,7 @@
+"""
+Tests for BitsType.
+"""
+
 from typing import ClassVar
 
 import pytest

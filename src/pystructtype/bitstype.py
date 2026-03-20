@@ -1,3 +1,7 @@
+"""
+BitsType: Base class for bitfield structs.
+"""
+
 import itertools
 from collections.abc import Mapping
 from dataclasses import field
@@ -17,10 +21,15 @@ class BitsType(StructDataclass):
     __bits_type__: ClassVar[type]
     __bits_definition__: ClassVar[dict[str, int | list[int]] | Mapping[str, int | list[int]]]
 
-    _raw: int
-    _meta: dict[str, int | list[int]]
+    _raw: int  # Holds the raw integer value for the bitfield.
+    _meta: dict[str, int | list[int]]  # Metadata mapping attribute names to bit positions.
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls: type[BitsType], **kwargs: object) -> None:
+        """
+        Initialize subclass by setting up bitfield attributes and type annotations.
+        Ensures __bits_type__ and __bits_definition__ are present, wraps definition in MappingProxyType,
+        and sets up class-level fields and annotations for each bitfield.
+        """
         super().__init_subclass__(**kwargs)
         # Check for required attributes
         if not hasattr(cls, "__bits_type__") or not hasattr(cls, "__bits_definition__"):
@@ -34,10 +43,6 @@ class BitsType(StructDataclass):
         if isinstance(definition, dict) and not isinstance(definition, MappingProxyType):
             definition = MappingProxyType(definition)
             cls.__bits_definition__ = definition
-
-        # # Remove __bits_type__ and __bits_definition__ from __annotations__ if present
-        # cls.__annotations__.pop("__bits_type__", None)
-        # cls.__annotations__.pop("__bits_definition__", None)
 
         # Set the correct type for the raw data
         cls._raw = 0
@@ -59,10 +64,17 @@ class BitsType(StructDataclass):
                 cls.__annotations__[key] = bool
 
     def __post_init__(self) -> None:
+        """
+        Post-initialization to set up the _meta attribute from the class definition.
+        """
         super().__post_init__()
         self._meta = dict(self.__bits_definition__)
 
     def _decode(self, data: list[int]) -> None:
+        """
+        Decode the bitfield from a list of integers, updating the boolean attributes
+        according to the bit positions defined in _meta.
+        """
         super()._decode(data)
         bin_data = int_to_bool_list(self._raw, self._byte_length)
         for k, v in self._meta.items():
@@ -73,6 +85,10 @@ class BitsType(StructDataclass):
                 setattr(self, k, bin_data[v])
 
     def _encode(self) -> list[int]:
+        """
+        Encode the boolean attributes into a list of integers representing the bitfield.
+        Updates _raw and returns the encoded list for further processing.
+        """
         bin_data = list(itertools.repeat(False, self._byte_length * 8))
         for k, v in self._meta.items():
             if isinstance(v, list):

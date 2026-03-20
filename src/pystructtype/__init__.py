@@ -1,8 +1,13 @@
+"""
+pystructtype: Public API for pystructtype package.
+"""
+
 from pystructtype.bitstype import BitsType
 from pystructtype.structdataclass import StructDataclass
 from pystructtype.structtypes import (
     TypeInfo,
     TypeMeta,
+    bool_t,
     char_t,
     double_t,
     float_t,
@@ -22,6 +27,7 @@ __all__ = [
     "StructDataclass",
     "TypeInfo",
     "TypeMeta",
+    "bool_t",
     "char_t",
     "double_t",
     "float_t",

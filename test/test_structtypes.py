@@ -1,3 +1,7 @@
+"""
+Tests for structtypes and StructDataclass.
+"""
+
 from typing import Annotated
 
 import pytest
@@ -5,6 +9,7 @@ import pytest
 from pystructtype import (
     StructDataclass,
     TypeMeta,
+    bool_t,
     char_t,
     double_t,
     float_t,
@@ -145,6 +150,43 @@ def test_iterate_types() -> None:
     assert list(iterate_types(MyStruct)) == results
 
 
+def test_iterate_types_invalid_input() -> None:
+    """
+    Test that iterate_types raises TypeError when input is not a class type.
+    """
+    with pytest.raises(TypeError):
+        list(iterate_types(123))  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        list(iterate_types("not_a_type"))  # type: ignore[arg-type]
+
+
 def test_typemeta_eq_failure() -> None:
     with pytest.raises(TypeError):
         assert TypeMeta() == 2
+
+
+def test_bool_t_roundtrip() -> None:
+    """
+    Test that bool_t fields are auto-converted to bool on decode and to int on encode.
+    """
+
+    class MyStructBool(StructDataclass):
+        flag: bool_t
+        flags: Annotated[list[bool_t], TypeMeta[int](size=3, default=True)]
+
+    # Data: [True, False, True, True]
+    data = [1, 0, 1, 1]
+    s = MyStructBool()
+    assert s.flag is False
+    assert s.flags == [True, True, True]
+
+    s.decode(data)
+    assert isinstance(s.flag, bool)
+    assert s.flag is True
+    assert s.flags == [False, True, True]
+
+    # Now encode and check round-trip
+    s.flag = False
+    s.flags = [True, False, True]
+    encoded = s.encode()
+    assert list(encoded) == [0, 1, 0, 1]

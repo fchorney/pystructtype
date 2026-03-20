@@ -1,3 +1,7 @@
+"""
+Integration test for SMXConfigType using TEST_CONFIG_DATA.
+"""
+
 from test.examples import TEST_CONFIG_DATA, SMXConfigType
 
 
