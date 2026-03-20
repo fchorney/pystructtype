@@ -1,3 +1,9 @@
+"""
+Tests for utils.
+"""
+
+import pytest
+
 from pystructtype.utils import int_to_bool_list, list_chunks
 
 
@@ -29,3 +35,13 @@ def test_int_to_bool_list() -> None:
         True,
         False,
     ]
+
+
+def test_list_chunks_invalid_chunk_size() -> None:
+    """
+    Test that list_chunks raises ValueError when n <= 0.
+    """
+    with pytest.raises(ValueError):
+        list(list_chunks([1, 2, 3], 0))
+    with pytest.raises(ValueError):
+        list(list_chunks([1, 2, 3], -1))

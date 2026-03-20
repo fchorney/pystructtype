@@ -1,3 +1,7 @@
+"""
+Examples and integration tests for pystructtype.
+"""
+
 import itertools
 from dataclasses import field
 from enum import IntEnum

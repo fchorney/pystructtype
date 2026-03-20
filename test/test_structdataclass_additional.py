@@ -1,3 +1,7 @@
+"""
+Additional tests for StructDataclass.
+"""
+
 from dataclasses import is_dataclass
 from typing import Annotated
 
@@ -340,6 +344,26 @@ def test_structdataclass_default_list_type_error() -> None:
             a: Annotated[uint8_t, TypeMeta(default=[1, 2])]
 
 
+def test_structdataclass_default_list_type() -> None:
+    class S(StructDataclass):
+        a: Annotated[list[uint8_t], TypeMeta(size=2, default=[1, 2])]
+
+    x = S()
+    assert x.a == [1, 2]
+
+
+def test_structdataclass_default_class() -> None:
+    class S(StructDataclass):
+        a: uint8_t
+
+    class D(StructDataclass):
+        a: Annotated[list[S], TypeMeta(size=2, default=S)]
+
+    w = S()
+    x = D()
+    assert [x.a[0].a, x.a[1].a] == [w.a, w.a]
+
+
 def test_structdataclass_invalid_branches_all() -> None:
     # 259, 275: non-pystructtype, non-class field is ignored (already covered by regular field tests)
     # 311: not type_iterator.is_list, but size > 1
@@ -423,3 +447,21 @@ def test_structdataclass_defensive_branches() -> None:
 
     s5 = S5()
     assert isinstance(s5.a, list) and all(isinstance(x, Dummy) for x in s5.a)
+
+
+def test_decode_value_error_on_wrong_length() -> None:
+    """
+    Test that decode raises ValueError if input data length does not match expected struct size (line 265).
+    """
+
+    class S(StructDataclass):
+        a: uint8_t
+        b: uint8_t
+
+    s = S()
+    # struct expects 2 bytes, provide only 1
+    with pytest.raises(ValueError, match="Input data length 1 does not match expected struct size 2"):
+        s.decode([1])
+    # struct expects 2 bytes, provide 3
+    with pytest.raises(ValueError, match="Input data length 3 does not match expected struct size 2"):
+        s.decode([1, 2, 3])

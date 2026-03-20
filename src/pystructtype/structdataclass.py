@@ -1,9 +1,12 @@
+"""
+StructDataclass: Base class for auto-decoding/encoding struct-like dataclasses.
+"""
+
 import inspect
 import re
 import struct
 from copy import deepcopy
 from dataclasses import dataclass, field, is_dataclass
-from typing import ClassVar
 
 from pystructtype.structtypes import iterate_types
 
@@ -27,17 +30,17 @@ class StructDataclass:
     subclass.
     """
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls: type[StructDataclass], **kwargs: object) -> None:
+        """
+        Automatically configure the subclass as a dataclass and set up default values for fields.
+        Handles special logic for list and non-list fields, default factories, and class variables.
+        """
         super().__init_subclass__(**kwargs)
         # If the class is already a dataclass, skip
         if is_dataclass(cls):
             return
         # Make sure any fields without a default have one
         for type_iterator in iterate_types(cls):
-            if type_iterator.key.startswith("__"):
-                # Ignore double underscore vars
-                continue
-
             if not type_iterator.is_pystructtype and not inspect.isclass(type_iterator.base_type):
                 continue
             if not type_iterator.type_meta or type_iterator.type_meta.size == 1:
@@ -81,34 +84,20 @@ class StructDataclass:
                         )
                 else:
                     default = type_iterator.base_type
-                    if inspect.isclass(default):
-                        default_list = field(
-                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
-                                d() for _ in range(s)
-                            ]
-                        )
-                    else:
-                        default_list = field(
-                            default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
-                                deepcopy(d) for _ in range(s)
-                            ]
-                        )
+                    default_list = field(
+                        default_factory=lambda d=default, s=type_iterator.type_meta.size: [  # type: ignore
+                            d() for _ in range(s)
+                        ]
+                    )
+
                 setattr(cls, type_iterator.key, default_list)
-        # Remove ClassVar-annotated keys from __annotations__ and class dict before dataclass(cls)
-        classvar_keys = [k for k, v in list(cls.__annotations__.items()) if getattr(v, "__origin__", None) is ClassVar]
-        # Save and remove from class dict
-        classvar_backup = {}
-        for k in classvar_keys:
-            cls.__annotations__.pop(k, None)
-            if hasattr(cls, k):
-                classvar_backup[k] = getattr(cls, k)
-                delattr(cls, k)
         dataclass(cls)
-        # Restore classvars
-        for k, v in classvar_backup.items():
-            setattr(cls, k, v)
 
     def __post_init__(self) -> None:
+        """
+        Initialize instance state and struct format after dataclass construction.
+        Computes struct format string and byte length for encoding/decoding.
+        """
         self._state: list[StructState] = []
 
         # Grab Struct Format
@@ -140,7 +129,6 @@ class StructDataclass:
                 pass
         self._simplify_format()
         self._byte_length = struct.calcsize("=" + self.struct_fmt)
-        # print(f"{self.__class__.__name__}: {self._byte_length} : {self.struct_fmt}")
 
     def _simplify_format(self) -> None:
         """
@@ -151,7 +139,7 @@ class StructDataclass:
         # Expand any already condensed sections
         # This can happen if we have nested StructDataclasses
         expanded_format = ""
-        items = re.findall(r"([a-zA-Z]|\d+)", self.struct_fmt)
+        items = re.findall(r"([a-zA-Z?]|\d+)", self.struct_fmt)
         items_len = len(items)
         idx = 0
         while idx < items_len:
@@ -170,7 +158,7 @@ class StructDataclass:
 
         # Simplify the format by turning multiple consecutive letters into a number + letter combo
         simplified_format = ""
-        for group in (x[0] for x in re.findall(r"(\d*([a-zA-Z])\2*)", expanded_format)):
+        for group in (x[0] for x in re.findall(r"(\d*([a-zA-Z?])\2*)", expanded_format)):
             if re.match(r"\d+", group[0]):
                 # Just pass through any format that we've explicitly kept
                 # a number in front of
@@ -269,9 +257,12 @@ class StructDataclass:
 
         :param data: list of ints or a bytes object
         :param little_endian: True if decoding little_endian formatted data, else False
+        :raises ValueError: If the input data is not the correct length for the struct
         """
         data = self._to_bytes(data)
-
+        expected_len = struct.calcsize(self._endian(little_endian) + self.struct_fmt)
+        if len(data) != expected_len:
+            raise ValueError(f"Input data length {len(data)} does not match expected struct size {expected_len}")
         # Decode
         self._decode(list(struct.unpack(self._endian(little_endian) + self.struct_fmt, data)))
 

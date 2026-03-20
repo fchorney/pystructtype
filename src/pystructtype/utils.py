@@ -1,16 +1,23 @@
+"""
+utils: Utility functions for pystructtype.
+"""
+
 from collections.abc import Generator
 from typing import TypeVar
 
-C = TypeVar("C")
+C = TypeVar("C")  # Generic type variable for list_chunks and other generic utilities.
 
 
 def list_chunks[C](_list: list[C], n: int) -> Generator[list[C]]:
     """
     Yield successive n-sized chunks from a list.
     :param _list: List to chunk out
-    :param n: Size of chunks
+    :param n: Size of chunks (must be > 0)
     :return: Generator of n-sized chunks of _list
+    :raises ValueError: If n <= 0
     """
+    if n <= 0:
+        raise ValueError("Chunk size n must be greater than 0")
     yield from (_list[i : i + n] for i in range(0, len(_list), n))
 
 
